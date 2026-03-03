@@ -1,0 +1,22 @@
+{
+  "welcome": "Welcome to 101 Okey",
+  "login": "Login",
+  "register": "Register",
+  "email": "Email",
+  "password": "Password",
+  "name": "Name",
+  "submit": "Submit",
+  "dashboard": "Dashboard",
+  "lobby": "Lobby",
+  "createLobby": "Create Lobby",
+  "joinLobby": "Join Lobby",
+  "ready": "Ready",
+  "startGame": "Start Game",
+  "premiumToggle": "Premium Mode",
+  "language": "Language",
+  "english": "English",
+  "turkish": "Turkish",
+  "chat": "Chat",
+  "send": "Send",
+  "logout": "Logout"
+}

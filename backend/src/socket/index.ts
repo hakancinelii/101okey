@@ -1,0 +1,1074 @@
+// src/socket/index.ts
+import { Server as HttpServer } from 'http';
+import { Server as SocketIOServer, Socket } from 'socket.io';
+import { PrismaClient, GameStatus, MoveType } from '@prisma/client';
+import { verifyToken } from '../middleware/auth';
+import { generateTilePool, shuffle, distributeTiles, calculateSetScore, calculateMultipleSetsScore, calculateHandPenalty } from '../game/logic';
+import { Tile } from '../game/rules';
+
+const prisma = new PrismaClient();
+const botProcessingLock = new Map<string, boolean>();
+const turnStartTimes = new Map<string, number>(); // track when each game's turn started
+
+/**
+ * Initialize Socket.IO server.
+ * Attach to an existing HTTP server (Express app).
+ */
+export const initSocket = (httpServer: HttpServer) => {
+    const allowedOrigins = [
+        'http://localhost:5173',
+        'http://localhost:3000',
+        process.env.FRONTEND_URL,
+    ].filter(Boolean) as string[];
+
+    const io = new SocketIOServer(httpServer, {
+        cors: { origin: allowedOrigins, methods: ['GET', 'POST'], credentials: true },
+    });
+
+    // Middleware to verify JWT on each socket connection
+    io.use(async (socket: Socket, next) => {
+        const token = socket.handshake.auth?.token;
+        if (!token) return next(new Error('Missing token'));
+        try {
+            // Re‑use verifyToken logic – it attaches user to request, we mimic it here
+            const payload = (await import('jsonwebtoken')).verify(token, process.env.JWT_SECRET!);
+            // @ts-ignore – we add a custom field
+            (socket as any).user = payload;
+            next();
+        } catch (e) {
+            next(new Error('Invalid token'));
+        }
+    });
+
+    // ---------- Lobby handling ----------
+    io.on('connection', (socket) => {
+        const userId = (socket as any).user?.userId;
+        console.log(`Socket connected: ${socket.id} (user ${userId})`);
+
+        // Start Supervisor if not already running (static-like check)
+        if (!(global as any).botSupervisorStarted) {
+            (global as any).botSupervisorStarted = true;
+            setInterval(turnSupervisor, 5000); // Check every 5s for better responsiveness
+        }
+
+        // Helper to emit full member list
+        const emitLobbyUpdate = async (lobbyId: string) => {
+            const members = await prisma.gameMember.findMany({
+                where: { gameId: lobbyId },
+                include: { user: true }
+            });
+            const game = await prisma.game.findUnique({ where: { id: lobbyId } });
+
+            const memberList = members.map(m => ({
+                id: m.userId,
+                name: m.isBot ? `🤖 ${m.user.name}` : m.user.name || m.user.email,
+                ready: m.isReady,
+                isBot: m.isBot,
+                seat: m.seat,
+                host: m.userId === game?.hostId
+            }));
+            io.to(lobbyId).emit('lobbyUpdate', memberList);
+        };
+
+        // Join a lobby (room) – lobbyId is the Game.id (pending game)
+        socket.on('joinLobby', async (lobbyId: string, callback: (err?: string) => void) => {
+            try {
+                let gameRec = await prisma.game.findUnique({
+                    where: { id: lobbyId },
+                    include: { members: { include: { user: true } } }
+                });
+
+                if (!gameRec) {
+                    // Create new lobby
+                    gameRec = await prisma.game.create({
+                        data: { id: lobbyId, hostId: userId, status: 'PENDING' },
+                        include: { members: { include: { user: true } } }
+                    });
+                } else if (gameRec.status === 'FINISHED') {
+                    // Reincarnate finished game as a new lobby
+                    await prisma.$transaction([
+                        prisma.game.update({
+                            where: { id: lobbyId },
+                            data: {
+                                status: 'PENDING',
+                                hostId: userId,
+                                tilePool: null,
+                                okeyTile: null,
+                                turnIndex: 0,
+                                lastDiscard: null,
+                                startedAt: null,
+                                finishedAt: null
+                            } as any
+                        }),
+                        prisma.gameMember.deleteMany({ where: { gameId: lobbyId } })
+                    ]);
+                    gameRec = await prisma.game.findUnique({
+                        where: { id: lobbyId },
+                        include: { members: { include: { user: true } } }
+                    });
+                }
+
+                const game = gameRec!;
+
+                // If host is no longer in members, assign a new host (or this user)
+                const hostPresent = game.members.some(m => m.userId === game.hostId);
+                if (!hostPresent && game.status === 'PENDING') {
+                    await prisma.game.update({
+                        where: { id: lobbyId },
+                        data: { hostId: userId }
+                    });
+                }
+
+                const isMember = game.members.some(m => m.userId === userId);
+
+                if (game.status === 'ACTIVE' && !isMember) {
+                    return callback?.('Oyun devam ediyor, katılamazsınız.');
+                }
+
+                // Add member if not already present
+                if (!isMember) {
+                    const currentMembers = await prisma.gameMember.findMany({ where: { gameId: lobbyId } });
+
+                    if (currentMembers.length >= 4) {
+                        // Special Handling: Public lobby (default) or lobbies with bots
+                        const botToReplace = currentMembers.find(m => m.isBot);
+                        if (botToReplace) {
+                            console.log(`Replacing bot ${botToReplace.userId} for user ${userId} in lobby ${lobbyId}`);
+                            await prisma.gameMember.delete({ where: { id: botToReplace.id } });
+
+                            await prisma.gameMember.create({
+                                data: { gameId: lobbyId, userId, seat: botToReplace.seat, isReady: false }
+                            });
+                        } else {
+                            return callback?.('Masa dolu');
+                        }
+                    } else {
+                        // Find lowest available seat
+                        const seats = [0, 1, 2, 3];
+                        const occupied = currentMembers.map(m => m.seat);
+                        const seat = seats.find(s => !occupied.includes(s)) ?? currentMembers.length;
+
+                        await prisma.gameMember.create({
+                            data: { gameId: lobbyId, userId, seat, isReady: false }
+                        });
+                    }
+                }
+
+                socket.join(lobbyId);
+                await emitLobbyUpdate(lobbyId);
+
+                // Reload game record to ensure all checks pass (and seat assignments are reflected)
+                const gameAfterJoin = await prisma.game.findUnique({
+                    where: { id: lobbyId },
+                    include: { members: { include: { user: true } } }
+                });
+                if (!gameAfterJoin) return callback?.('Lobby state error');
+
+                // If game is active and user is returning, send gameStarted
+                if (game.status === 'ACTIVE') {
+                    const playerList = game.members.map((m: any) => ({
+                        userId: m.userId,
+                        name: m.user?.name || m.user?.email || 'Player',
+                        seat: m.seat,
+                        openScore: m.openScore || 0,
+                        openSets: m.openSets || [],
+                        penaltyScore: m.penaltyScore || 0
+                    }));
+
+                    const member = game.members.find(m => m.userId === userId);
+                    socket.emit('gameStarted', {
+                        gameId: lobbyId,
+                        hand: (member as any)?.hand || [],
+                        okeyTile: game.okeyTile as any,
+                        deckCount: (game.tilePool as any)?.length || 0,
+                        turnIndex: game.turnIndex,
+                        members: playerList
+                    });
+                }
+
+                callback?.();
+            } catch (e) {
+                console.error('JoinLobby Error:', e);
+                callback?.('Sunucu hatası');
+            }
+        });
+
+        // Ready toggle
+        socket.on('setReady', async (data: any, callback?: (err?: string) => void) => {
+            try {
+                // Support both old boolean-only and new object format for grace period
+                const targetLobbyId = typeof data === 'object' ? data.lobbyId : null;
+                const isReady = typeof data === 'object' ? data.isReady : data;
+
+                let member;
+                if (targetLobbyId) {
+                    member = await prisma.gameMember.findFirst({
+                        where: { userId, gameId: targetLobbyId }
+                    });
+                } else {
+                    // Fallback for older clients (pick most recent)
+                    member = await prisma.gameMember.findFirst({
+                        where: { userId },
+                        orderBy: { game: { createdAt: 'desc' } }
+                    });
+                }
+
+                if (!member) return callback?.('Not in a lobby');
+
+                await prisma.gameMember.update({
+                    where: { id: member.id },
+                    data: { isReady }
+                });
+
+                await emitLobbyUpdate(member.gameId);
+                callback?.();
+            } catch (e) {
+                console.error('setReady Error:', e);
+                callback?.('Server error');
+            }
+        });
+        // Add a bot to the lobby
+        socket.on('addBot', async (lobbyId: string, callback?: (err?: string) => void) => {
+            try {
+                const game = await prisma.game.findUnique({ where: { id: lobbyId }, include: { members: true } });
+                if (!game || game.hostId !== userId) return callback?.('Only host can add bots');
+
+                const freshMembers = await prisma.gameMember.findMany({ where: { gameId: lobbyId } });
+                console.log(`AddBot Debug: Lobby ${lobbyId} has ${freshMembers.length} members`);
+                if (freshMembers.length >= 4) {
+                    console.log('Members:', freshMembers.map(m => ({ id: m.userId, isBot: m.isBot })));
+                    return callback?.('Lobby full');
+                }
+
+                // Find the first empty seat (0-3)
+                const seats = [0, 1, 2, 3];
+                const occupiedSeats = freshMembers.map(m => m.seat);
+                const nextSeat = seats.find(s => !occupiedSeats.includes(s));
+
+                if (nextSeat === undefined) return callback?.('Lobby full');
+
+                // Find or create a bot user
+                const botEmail = `bot_${Date.now()}_${Math.floor(Math.random() * 1000)}@okey.ai`;
+                const botUser = await prisma.user.create({
+                    data: {
+                        email: botEmail,
+                        password: 'bot_password_not_used',
+                        name: `Bot ${Date.now().toString().slice(-4)}`,
+                        approved: true
+                    }
+                });
+
+                await prisma.gameMember.create({
+                    data: {
+                        gameId: lobbyId,
+                        userId: botUser.id,
+                        seat: nextSeat,
+                        isReady: true,
+                        isBot: true
+                    }
+                });
+
+                await emitLobbyUpdate(lobbyId);
+                callback?.();
+            } catch (e) {
+                console.error(e);
+                callback?.('Server error');
+            }
+        });
+
+        // Remove a bot from the lobby
+        socket.on('removeBot', async (botUserId: string, callback?: (err?: string) => void) => {
+            try {
+                const member = await prisma.gameMember.findFirst({ where: { userId }, include: { game: true } });
+                if (!member || member.game.hostId !== userId) return callback?.('Only host can remove bots');
+
+                const botMember = await prisma.gameMember.findFirst({
+                    where: { gameId: member.gameId, userId: botUserId, isBot: true }
+                });
+                if (!botMember) return callback?.('Bot not found');
+
+                await prisma.gameMember.delete({ where: { id: botMember.id } });
+                await emitLobbyUpdate(member.gameId);
+                callback?.();
+            } catch (e) {
+                console.error(e);
+                callback?.('Server error');
+            }
+        });
+
+        // Reset a game to PENDING status
+        socket.on('resetGame', async (lobbyId: string, callback?: (err?: string) => void) => {
+            try {
+                const game = await prisma.game.findUnique({ where: { id: lobbyId } });
+                if (!game || game.hostId !== userId) return callback?.('Only host can reset game');
+
+                await prisma.$transaction([
+                    prisma.game.update({
+                        where: { id: lobbyId },
+                        data: {
+                            status: 'PENDING',
+                            tilePool: null,
+                            okeyTile: null,
+                            lastDiscard: null,
+                            turnIndex: 0
+                        } as any
+                    }),
+                    // DELETE ALL EXCEPT HOST to ensure a truly fresh start
+                    prisma.gameMember.deleteMany({
+                        where: {
+                            gameId: lobbyId,
+                            userId: { not: userId }
+                        }
+                    }),
+                    prisma.gameMember.updateMany({
+                        where: { gameId: lobbyId, userId: userId },
+                        data: {
+                            hand: null,
+                            openScore: 0,
+                            openSets: [] as any,
+                            hasDrawn: false,
+                            mustOpen: false,
+                            penaltyScore: 0,
+                            isReady: false
+                        } as any
+                    })
+                ]);
+
+                await emitLobbyUpdate(lobbyId);
+                io.to(lobbyId).emit('chatMessage', { user: 'SYSTEM', text: 'Masa sıfırlandı.' });
+                callback?.();
+            } catch (e) {
+                console.error(e);
+                callback?.('Server error');
+            }
+        });
+
+        // Host starts the game when all 4 are ready
+        socket.on('startGame', async (lobbyId: string, options: any, callback?: (err?: string) => void) => {
+            try {
+                const actualCallback = typeof options === 'function' ? options : callback;
+                const opts = typeof options === 'object' ? options : {};
+                const maxRounds = opts.maxRounds || 3;
+
+                const game = await prisma.game.findUnique({ where: { id: lobbyId } });
+                if (!game) return actualCallback?.('Masa bulunamadı');
+                if (game.hostId !== userId) return actualCallback?.('Sadece masa sahibi başlatabilir');
+
+                const members = await prisma.gameMember.findMany({
+                    where: { gameId: lobbyId },
+                    orderBy: { seat: 'asc' },
+                    include: { user: true }
+                });
+
+                // Auto-ready bots for start
+                const botIds = members.filter(m => m.isBot).map(m => m.id);
+                if (botIds.length > 0) {
+                    await prisma.gameMember.updateMany({
+                        where: { id: { in: botIds } },
+                        data: { isReady: true }
+                    });
+                }
+
+                if (members.some((m) => !m.isReady && !m.isBot)) {
+                    console.log('Ready check failed for lobby:', lobbyId);
+                    return actualCallback?.('Tüm oyuncuların hazır olması gerekiyor');
+                }
+
+                await prisma.$transaction([
+                    prisma.game.update({
+                        where: { id: lobbyId },
+                        data: { maxRounds }
+                    }),
+                    prisma.gameMember.updateMany({
+                        where: { gameId: lobbyId },
+                        data: {
+                            penaltyScore: 0,
+                            totalPenaltyScore: 0,
+                            openScore: 0,
+                            openSets: [] as any,
+                            mustOpen: false
+                        }
+                    })
+                ]);
+
+                // Start first round
+                await startRound(lobbyId, 1);
+                actualCallback?.();
+            } catch (e) {
+                console.error(e);
+                const actualCallback = typeof options === 'function' ? options : callback;
+                actualCallback?.('Server error');
+            }
+        });
+
+        async function startRound(gameId: string, roundNumber: number) {
+            const game = await prisma.game.findUnique({
+                where: { id: gameId },
+                include: { members: { include: { user: true } } }
+            });
+            if (!game) return;
+
+            const members = game.members.sort((a, b) => a.seat - b.seat);
+            const gameSeed = gameId + '-' + Date.now() + '-' + roundNumber;
+            let pool = shuffle(generateTilePool(gameSeed));
+            const indicator = pool.pop();
+            const okeyTile = indicator ? {
+                ...indicator,
+                number: indicator.number === 13 ? 1 : indicator.number + 1
+            } : null;
+
+            const { hands, remainingPool } = distributeTiles(pool, members.length);
+
+            await prisma.$transaction([
+                prisma.game.update({
+                    where: { id: gameId },
+                    data: {
+                        status: 'ACTIVE',
+                        startedAt: new Date(),
+                        tilePool: remainingPool as any,
+                        okeyTile: okeyTile as any,
+                        turnIndex: 0,
+                        currentRound: roundNumber,
+                        lastDiscard: null
+                    } as any
+                }),
+                ...members.map((m, idx) =>
+                    prisma.gameMember.update({
+                        where: { id: m.id },
+                        data: {
+                            hand: hands[idx] as any,
+                            hasDrawn: idx === 0,
+                            openScore: 0,
+                            openSets: [] as any,
+                            mustOpen: false,
+                            penaltyScore: 0,
+                            isReady: false
+                        } as any
+                    })
+                )
+            ]);
+
+            const allSockets = await io.in(gameId).fetchSockets();
+            for (const s of allSockets) {
+                const sUserId = (s as any).user?.userId;
+                const idx = members.findIndex(mem => mem.userId === sUserId);
+                if (idx !== -1) {
+                    s.emit('gameStarted', {
+                        gameId: gameId,
+                        hand: hands[idx],
+                        deckCount: remainingPool.length,
+                        okeyTile,
+                        turnIndex: 0,
+                        currentRound: roundNumber,
+                        maxRounds: game.maxRounds,
+                        members: members.map(m => ({
+                            userId: m.userId,
+                            name: m.isBot ? `🤖 ${m.user.name}` : m.user.name || m.user.email,
+                            seat: m.seat,
+                            isBot: m.isBot,
+                            totalPenaltyScore: m.totalPenaltyScore
+                        }))
+                    });
+                }
+            }
+            setTimeout(() => checkAndProcessBotTurn(gameId), 2000);
+        }
+
+        socket.on('startNextRound', async (gameId: string, callback?: (err?: string) => void) => {
+            try {
+                const game = await prisma.game.findUnique({ where: { id: gameId } });
+                if (!game || game.hostId !== userId) return callback?.('Unauthorized');
+                if (game.currentRound >= game.maxRounds) return callback?.('Game is already finished');
+
+                await startRound(gameId, game.currentRound + 1);
+                callback?.();
+            } catch (e) {
+                console.error(e);
+                callback?.('Server error');
+            }
+        });
+
+        // Join active game
+        socket.on('joinGame', async (gameId: string, callback?: (err?: string) => void) => {
+            try {
+                let game = await prisma.game.findUnique({
+                    where: { id: gameId },
+                    include: { members: { include: { user: true } } }
+                }) as any;
+                if (!game || game.status !== 'ACTIVE') return callback?.('Game not found or not active');
+
+                const member = game.members.find((m: any) => m.userId === userId);
+                if (!member) return callback?.('Not a member of this game');
+
+                // Backwards compatibility: if okeyTile is missing, pick one now
+                if (!game.okeyTile && game.tilePool) {
+                    const pool = (game.tilePool as any) as any[];
+                    if (pool.length > 0) {
+                        const indicator = pool.pop();
+                        const okeyTile = { ...indicator, number: indicator.number === 13 ? 1 : indicator.number + 1 };
+                        game = await prisma.game.update({
+                            where: { id: gameId },
+                            data: { okeyTile: okeyTile as any, tilePool: pool as any },
+                            include: { members: true }
+                        }) as any;
+                    }
+                }
+
+                socket.join(gameId);
+
+                // Send current state
+                const pool = (game.tilePool as any) as any[];
+                const playerList = game.members.map((m: any) => ({
+                    userId: m.userId,
+                    name: m.user?.name || m.user?.email || 'Player',
+                    seat: m.seat,
+                    openSets: m.openSets || [],
+                    openScore: m.openScore || 0,
+                    penaltyScore: m.penaltyScore || 0
+                }));
+
+                socket.emit('gameState', {
+                    hand: member.hand as any,
+                    board: [], // TODO: track board state
+                    deckCount: pool.length,
+                    okeyTile: game.okeyTile as any,
+                    turnIndex: game.turnIndex,
+                    lastDiscard: game.lastDiscard as any,
+                    members: playerList
+                });
+
+                callback?.();
+                // Trigger bot check in case game was stuck on a bot turn
+                setTimeout(() => checkAndProcessBotTurn(gameId), 1000);
+            } catch (e) {
+                console.error(e);
+                callback?.('Server error');
+            }
+        });
+
+        // ---------- In‑game actions ----------
+        socket.on('drawTile', async (callback: (tile?: any, err?: string) => void) => {
+            try {
+                // Get the active gameId from the socket's rooms
+                const gameRooms = [...socket.rooms].filter(r => r !== socket.id);
+                const activeGameId = gameRooms[gameRooms.length - 1];
+                if (!activeGameId) return callback?.(undefined, 'Not in a game room');
+
+                const game = await prisma.game.findUnique({
+                    where: { id: activeGameId },
+                    include: { members: { orderBy: { seat: 'asc' } } }
+                }) as any;
+                if (!game || game.status !== 'ACTIVE') return callback?.(undefined, 'Game not active');
+
+                const member = game.members.find((m: any) => m.userId === userId);
+                if (!member) return callback?.(undefined, 'Not in this game');
+
+                const myIdx = game.members.findIndex((m: any) => m.userId === userId);
+                if (game.turnIndex !== myIdx) return callback?.(undefined, 'Not your turn');
+
+                const pool = (game.tilePool as any) as any[];
+                if (!pool || pool.length === 0) return callback?.(undefined, 'Deck empty');
+                if (member.hasDrawn) return callback?.(undefined, 'Already drawn');
+
+                const drawnTile = pool.shift();
+                const updatedHand = [...((member.hand as any) || []), drawnTile];
+
+                await prisma.$transaction([
+                    prisma.game.update({ where: { id: activeGameId }, data: { tilePool: pool } as any }),
+                    prisma.gameMember.update({ where: { id: member.id }, data: { hand: updatedHand, hasDrawn: true } as any })
+                ]);
+
+                io.to(activeGameId).emit('poolUpdate', { deckCount: pool.length });
+                callback(drawnTile);
+            } catch (e) {
+                console.error(e);
+                callback?.(undefined, 'Server error');
+            }
+        });
+
+        socket.on('discardTile', async (tileId: string, callback?: (err?: string) => void) => {
+            try {
+                const gameRooms = [...socket.rooms].filter(r => r !== socket.id);
+                const activeGameId = gameRooms[gameRooms.length - 1];
+                if (!activeGameId) return callback?.('Not in a game room');
+
+                const game = await prisma.game.findUnique({
+                    where: { id: activeGameId },
+                    include: { members: { orderBy: { seat: 'asc' } } }
+                }) as any;
+                if (!game || game.status !== 'ACTIVE') return callback?.('Game not active');
+
+                const member = game.members.find((m: any) => m.userId === userId);
+                if (!member) return callback?.('Not in this game');
+
+                const members = game.members;
+                const myIdx = members.findIndex((m: any) => m.userId === userId);
+
+                if (game.turnIndex !== myIdx) return callback?.('Sıra sizde değil');
+                if (!member.hasDrawn) return callback?.('Önce taş çekmelisiniz');
+                if (member.mustOpen) return callback?.('Yan taşı aldığınız için yere per açmak zorundasınız');
+
+                const currentHand = (member.hand as any) || [];
+                const discardedTile = currentHand.find((t: any) => t.id === tileId);
+                if (!discardedTile) return callback?.('Tile not in hand');
+                const updatedHand = currentHand.filter((t: any) => t.id !== tileId);
+
+                const nextTurn = (game.turnIndex + 1) % members.length;
+
+                await prisma.$transaction([
+                    prisma.gameMember.update({ where: { id: member.id }, data: { hand: updatedHand, hasDrawn: false, mustOpen: false } as any }),
+                    prisma.game.update({
+                        where: { id: activeGameId },
+                        data: {
+                            turnIndex: nextTurn,
+                            lastDiscard: discardedTile as any
+                        } as any
+                    }),
+                    prisma.gameMember.update({
+                        where: { id: members[nextTurn].id },
+                        data: { hasDrawn: false, mustOpen: false } as any
+                    })
+                ]);
+
+                io.to(activeGameId).emit('tileDiscarded', { userId, tile: discardedTile });
+                io.to(activeGameId).emit('turnUpdate', { turnIndex: nextTurn });
+
+                // Track turn start
+                turnStartTimes.set(activeGameId, Date.now());
+
+                // If next player is bot, trigger delay
+                setTimeout(() => checkAndProcessBotTurn(activeGameId), 1500 + Math.random() * 1500);
+                callback?.();
+            } catch (e) {
+                console.error(e);
+                callback?.('Server error');
+            }
+        });
+
+        socket.on('drawDiscard', async (callback: (tile?: any, err?: string) => void) => {
+            try {
+                const member = await prisma.gameMember.findFirst({ where: { userId }, include: { game: true } });
+                if (!member) return callback?.(undefined, 'Not in a game');
+
+                const game = member.game as any;
+                if (!game.lastDiscard) return callback?.(undefined, 'No tile to draw');
+
+                const members = await prisma.gameMember.findMany({ where: { gameId: member.gameId }, orderBy: { seat: 'asc' } });
+                const myIdx = members.findIndex(m => m.userId === userId);
+                if (game.turnIndex !== myIdx) return callback?.(undefined, 'Not your turn');
+                if ((member as any).hasDrawn) return callback?.(undefined, 'Already drawn a tile');
+
+                const currentHand = (member.hand as any) || [];
+                const drawnTile = game.lastDiscard;
+                const updatedHand = [...currentHand, drawnTile];
+
+                await prisma.$transaction([
+                    prisma.gameMember.update({ where: { id: member.id }, data: { hand: updatedHand, hasDrawn: true, mustOpen: true } as any }),
+                    prisma.game.update({ where: { id: member.gameId }, data: { lastDiscard: null } as any })
+                ]);
+
+                io.to(member.gameId).emit('discardDrawn', { userId, tile: drawnTile });
+                callback(drawnTile);
+            } catch (e) {
+                console.error(e);
+                callback?.(undefined, 'Server error');
+            }
+        });
+
+        socket.on('undoDrawDiscard', async (tileId: string, callback?: (err?: string) => void) => {
+            try {
+                const member = await prisma.gameMember.findFirst({
+                    where: { userId },
+                    include: { game: true }
+                });
+                if (!member || !member.mustOpen) return callback?.('Geri verilecek taş bulunamadı');
+
+                const currentHand = (member.hand as any) || [];
+                const tileToReturn = currentHand.find((t: any) => t.id === tileId);
+                if (!tileToReturn) return callback?.('Taş listenizde bulunamadı');
+
+                const updatedHand = currentHand.filter((t: any) => t.id !== tileId);
+                const newPenalty = ((member as any).penaltyScore || 0) + 101; // Penalty for undoing pick
+
+                await prisma.$transaction([
+                    prisma.gameMember.update({
+                        where: { id: member.id },
+                        data: {
+                            hand: updatedHand,
+                            hasDrawn: false,
+                            mustOpen: false,
+                            penaltyScore: newPenalty
+                        } as any
+                    }),
+                    prisma.game.update({
+                        where: { id: member.gameId },
+                        data: { lastDiscard: tileToReturn } as any
+                    })
+                ]);
+
+                // Update everyone that the tile is back on the table
+                io.to(member.gameId).emit('tileDiscarded', { userId: 'TABLE', tile: tileToReturn });
+
+                callback?.();
+            } catch (e) {
+                console.error(e);
+                callback?.('Sunucu hatası');
+            }
+        });
+
+        socket.on('placeSets', async (setsOfIds: string[][], callback: (err?: string) => void) => {
+            try {
+                const member = await prisma.gameMember.findFirst({
+                    where: { userId },
+                    include: { game: true }
+                });
+                if (!member) return callback('Not in a game');
+
+                const game = member.game as any;
+                const okeyTile = game.okeyTile as any;
+                const currentHand = (member.hand as any) || [];
+
+                const allTileIds = setsOfIds.flat();
+                const usedTiles = currentHand.filter((t: any) => allTileIds.includes(t.id));
+                if (usedTiles.length !== allTileIds.length) return callback('Some tiles not in hand');
+
+                // Convert IDs back to Tile objects for validation
+                const setsOfTiles = setsOfIds.map(ids =>
+                    ids.map(id => currentHand.find((t: any) => t.id === id)) as Tile[]
+                );
+
+                const result = calculateMultipleSetsScore(setsOfTiles, okeyTile);
+                if (!result.isValid) return callback('Geçersiz setler');
+
+                const currentOpenScore = (member as any).openScore || 0;
+                const newTotalScore = currentOpenScore + result.totalScore;
+
+                // 101 Rule: Must reach 101 to open first time
+                if (currentOpenScore === 0 && newTotalScore < 101) {
+                    return callback(`Hala 101 sayısına ulaşamadınız: ${newTotalScore}`);
+                }
+
+                const updatedHand = currentHand.filter((t: any) => !allTileIds.includes(t.id));
+                const existingSets = ((member as any).openSets as any) || [];
+                const updatedOpenSets = [...existingSets, ...setsOfTiles];
+
+                await prisma.gameMember.update({
+                    where: { id: member.id },
+                    data: {
+                        hand: updatedHand,
+                        openSets: updatedOpenSets as any,
+                        openScore: newTotalScore,
+                        mustOpen: false
+                    } as any
+                });
+
+                // Emit event for each set placed or one big event
+                for (const set of setsOfTiles) {
+                    const setRes = calculateSetScore(set, okeyTile);
+                    io.to(member.gameId).emit('setPlaced', { userId, tiles: set, score: setRes.score });
+                }
+
+                callback();
+            } catch (e) {
+                console.error(e);
+                callback('Server error');
+            }
+        });
+
+        socket.on('chatMessage', async (data: { text: string }, callback?: (err?: string) => void) => {
+            const member = await prisma.gameMember.findFirst({
+                where: { userId },
+                include: { user: true }
+            });
+            if (!member) return callback?.('Not in a lobby');
+
+            const msg = {
+                user: member.user.name || member.user.email,
+                text: data.text
+            };
+            io.to(member.gameId).emit('chatMessage', msg);
+            callback?.();
+        });
+
+        socket.on('disconnect', () => {
+            console.log(`Socket disconnected: ${socket.id}`);
+        });
+    });
+
+    /**
+     * Periodically check all active games to see if it's a bot's turn or a timeout.
+     * This acts as a "self-healing" mechanism for the turn loop and AFK protection.
+     */
+    async function turnSupervisor() {
+        try {
+            const activeGames = await prisma.game.findMany({
+                where: { status: 'ACTIVE' },
+                include: { members: { orderBy: { seat: 'asc' } } }
+            });
+
+            const now = Date.now();
+
+            for (const game of activeGames) {
+                // 1. Initialize start time if missing
+                if (!turnStartTimes.has(game.id)) {
+                    turnStartTimes.set(game.id, now);
+                }
+
+                const startTime = turnStartTimes.get(game.id)!;
+                const elapsed = now - startTime;
+                const currentMember = game.members[game.turnIndex];
+
+                if (!currentMember) continue;
+
+                // 2. Handle Timeout (Player or Bot AFK)
+                if (elapsed > 70000) { // 70s timeout (60s + 10s grace)
+                    console.log(`Supervisor: Timeout detected in game ${game.id} (Member ${currentMember.userId}). Forcing move...`);
+                    await forceAutoMove(game.id);
+                    turnStartTimes.set(game.id, Date.now()); // Reset timer
+                    continue;
+                }
+
+                // 3. Handle Bots specifically
+                if (currentMember.isBot) {
+                    if (!botProcessingLock.get(game.id)) {
+                        // Only "boost" or "kickstart" if the bot has been silent for more than 15s
+                        // This allows the natural 5-10s random delay to finish first.
+                        if (elapsed > 15000) {
+                            console.log(`Supervisor: Bot ${currentMember.userId} in game ${game.id} is taking too long (>15s). Boosting...`);
+                            checkAndProcessBotTurn(game.id).catch(e => console.error('Bot boost error:', e));
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Error in turnSupervisor:', e);
+        }
+    }
+
+    /**
+     * Force a "Draw & Discard" for a stuck player or bot.
+     */
+    async function forceAutoMove(gameId: string) {
+        try {
+            const game = await prisma.game.findUnique({
+                where: { id: gameId },
+                include: { members: { orderBy: { seat: 'asc' } } }
+            });
+            if (!game || game.status !== 'ACTIVE') return;
+
+            const currentMember = game.members[game.turnIndex];
+            if (!currentMember) return;
+
+            // 1. Ensure a tile is drawn if not already
+            let pool = (game.tilePool as any) || [];
+            let currentHand = (currentMember.hand as any) || [];
+            let hasDrawn = currentMember.hasDrawn;
+
+            if (!hasDrawn) {
+                if (pool.length > 0) {
+                    const tile = pool.shift();
+                    currentHand.push(tile);
+                    hasDrawn = true;
+                } else {
+                    await handleGameFinish(gameId, 'DEST_BITTI');
+                    return;
+                }
+            }
+
+            // 2. Discard a tile (simple: last one)
+            const discardedTile = currentHand.pop();
+            const nextTurn = (game.turnIndex + 1) % game.members.length;
+
+            await prisma.$transaction([
+                prisma.game.update({
+                    where: { id: gameId },
+                    data: {
+                        tilePool: pool as any,
+                        turnIndex: nextTurn,
+                        lastDiscard: discardedTile as any
+                    } as any
+                }),
+                prisma.gameMember.update({
+                    where: { id: currentMember.id },
+                    data: { hand: currentHand, hasDrawn: false, mustOpen: false } as any
+                }),
+                prisma.gameMember.update({
+                    where: { id: game.members[nextTurn].id },
+                    data: { hasDrawn: false, mustOpen: false } as any
+                })
+            ]);
+
+            // 3. Sync
+            io.to(gameId).emit('poolUpdate', { deckCount: pool.length });
+            io.to(gameId).emit('tileDiscarded', { userId: currentMember.userId, tile: discardedTile });
+            io.to(gameId).emit('turnUpdate', { turnIndex: nextTurn });
+
+            turnStartTimes.set(gameId, Date.now());
+
+        } catch (e) {
+            console.error('Error in forceAutoMove:', e);
+        }
+    }
+
+    /**
+     * Bot Logic: Basic "Draw & Discard" bot
+     */
+    async function checkAndProcessBotTurn(gameId: string) {
+        if (botProcessingLock.get(gameId)) return;
+        botProcessingLock.set(gameId, true);
+
+        try {
+            const game = await prisma.game.findUnique({
+                where: { id: gameId },
+                include: { members: { include: { user: true }, orderBy: { seat: 'asc' } } }
+            });
+            if (!game || game.status !== 'ACTIVE') {
+                botProcessingLock.delete(gameId);
+                return;
+            }
+
+            const currentMember = game.members[game.turnIndex];
+            if (!currentMember || !currentMember.isBot) {
+                botProcessingLock.delete(gameId);
+                return;
+            }
+
+            // BOT TURN START
+            console.log(`Bot ${currentMember.userId} taking turn in game ${gameId}...`);
+
+            // 1. Draw tile
+            const pool = (game.tilePool as any) || [];
+            if (pool.length === 0) {
+                console.log(`Pool empty for game ${gameId}. Finishing game via handler.`);
+                await handleGameFinish(gameId, 'DEST_BITTI');
+                botProcessingLock.delete(gameId);
+                return;
+            }
+
+            const currentHand = (currentMember.hand as any) || [];
+            const drawnTile = pool.shift();
+            const updatedHand = [...currentHand, drawnTile];
+
+            // 2. Discard tile (simple: discard the first one that is NOT the Okey tile if possible)
+            const okeyTile = game.okeyTile as any;
+            let discardIndex = 0;
+            // Simple logic: don't discard Okey if you have other tiles
+            if (updatedHand.length > 1) {
+                const nonOkeyIdx = updatedHand.findIndex(t => !(t.color === okeyTile.color && t.number === okeyTile.number));
+                if (nonOkeyIdx !== -1) discardIndex = nonOkeyIdx;
+            }
+
+            const discardedTile = updatedHand[discardIndex];
+            updatedHand.splice(discardIndex, 1);
+
+            const nextTurn = (game.turnIndex + 1) % game.members.length;
+
+            await prisma.$transaction([
+                prisma.game.update({
+                    where: { id: gameId },
+                    data: {
+                        tilePool: pool as any,
+                        turnIndex: nextTurn,
+                        lastDiscard: discardedTile as any
+                    } as any
+                }),
+                prisma.gameMember.update({
+                    where: { id: currentMember.id },
+                    data: { hand: updatedHand } as any
+                }),
+                // Reset drawing state for the NEXT player
+                prisma.gameMember.update({
+                    where: { id: game.members[nextTurn].id },
+                    data: { hasDrawn: false, mustOpen: false } as any
+                })
+            ]);
+
+            // 3. Emit events
+            io.to(gameId).emit('poolUpdate', { deckCount: pool.length });
+            io.to(gameId).emit('tileDiscarded', { userId: currentMember.userId, tile: discardedTile });
+            io.to(gameId).emit('turnUpdate', { turnIndex: nextTurn });
+
+            // IMPORTANT: Update turn timer for next player
+            turnStartTimes.set(gameId, Date.now());
+
+            // Unlock before starting next bot turn or waiting
+            botProcessingLock.delete(gameId);
+
+            // If next turn is ALSO a bot, repeat with the requested 5-10s human-like delay
+            const nextMember = game.members[nextTurn];
+            if (nextMember && nextMember.isBot) {
+                // Randomly between 5 and 9 seconds
+                const botDelay = 5000 + Math.random() * 4000;
+                setTimeout(() => checkAndProcessBotTurn(gameId), botDelay);
+            }
+
+        } catch (e) {
+            console.error('Error in checkAndProcessBotTurn:', e);
+            botProcessingLock.delete(gameId);
+        }
+    }
+
+    async function handleGameFinish(gameId: string, reason: string) {
+        try {
+            const game = await prisma.game.findUnique({
+                where: { id: gameId },
+                include: { members: true }
+            });
+            if (!game || game.status === 'FINISHED') return;
+
+            const isFinalRound = game.currentRound >= game.maxRounds;
+            const okeyTile = game.okeyTile as any;
+            const updates = [];
+
+            for (const m of game.members) {
+                const hand = (m.hand as any) || [];
+                const penalty = calculateHandPenalty(hand, okeyTile, m.openScore > 0);
+
+                updates.push(prisma.gameMember.update({
+                    where: { id: m.id },
+                    data: {
+                        penaltyScore: penalty,
+                        totalPenaltyScore: { increment: penalty }
+                    }
+                }));
+            }
+
+            // Update game and penalties
+            await prisma.$transaction([
+                prisma.game.update({
+                    where: { id: gameId },
+                    data: {
+                        status: isFinalRound ? 'FINISHED' : 'ACTIVE',
+                        finishedAt: isFinalRound ? new Date() : null
+                    }
+                }),
+                ...updates
+            ]);
+
+            // Broadast finalized results
+            const updatedMembers = await prisma.gameMember.findMany({
+                where: { gameId },
+                include: { user: true }
+            });
+
+            io.to(gameId).emit('gameFinished', {
+                reason,
+                currentRound: game.currentRound,
+                maxRounds: game.maxRounds,
+                isFinal: isFinalRound,
+                members: updatedMembers.map(um => ({
+                    userId: um.userId,
+                    name: um.user?.name || um.user?.email || 'Player',
+                    penaltyScore: um.penaltyScore,
+                    totalPenaltyScore: um.totalPenaltyScore,
+                    openScore: um.openScore
+                }))
+            });
+
+        } catch (e) {
+            console.error('Error in handleGameFinish:', e);
+        }
+    }
+
+    return io;
+};

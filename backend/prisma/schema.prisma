@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String       @id @default(uuid())
+  email     String       @unique
+  password  String
+  name      String?
+  role      Role         @default(USER)
+  approved  Boolean      @default(false)
+  createdAt DateTime     @default(now())
+  games     GameMember[]
+}
+
+model Game {
+  id          String       @id @default(uuid())
+  hostId      String
+  status      GameStatus   @default(PENDING)
+  createdAt   DateTime     @default(now())
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  tilePool    Json?
+  okeyTile    Json?
+  turnIndex   Int          @default(0)
+  lastDiscard Json?
+  currentRound Int         @default(1)
+  maxRounds    Int         @default(3)
+  members     GameMember[]
+  moves       Move[]
+  config      Json?
+}
+
+model GameMember {
+  id        String  @id @default(uuid())
+  gameId    String
+  userId    String
+  seat      Int
+  isReady   Boolean @default(false)
+  isBot     Boolean @default(false)
+  hand      Json?
+  openScore Int     @default(0)
+  openSets  Json?
+  hasDrawn  Boolean @default(false)
+  mustOpen  Boolean @default(false)
+  penaltyScore Int @default(0)
+  totalPenaltyScore Int @default(0)
+  game      Game    @relation(fields: [gameId], references: [id])
+  user      User    @relation(fields: [userId], references: [id])
+}
+
+model Move {
+  id        String   @id @default(uuid())
+  gameId    String
+  playerId  String
+  type      MoveType
+  payload   Json
+  createdAt DateTime @default(now())
+  game      Game     @relation(fields: [gameId], references: [id])
+}
+
+model Config {
+  id             String  @id @default(uuid())
+  premiumEnabled Boolean @default(false)
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum GameStatus {
+  PENDING
+  ACTIVE
+  FINISHED
+}
+
+enum MoveType {
+  DRAW
+  DISCARD
+  SET
+  SEQUENCE
+  PASS
+}

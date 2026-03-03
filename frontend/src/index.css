@@ -1,0 +1,195 @@
+/* src/index.css */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: 'Inter', system-ui, sans-serif;
+}
+
+@layer base {
+
+  html,
+  body {
+    height: 100vh;
+    margin: 0;
+    overflow: hidden;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer utilities {
+  .bg-okey-table {
+    background: radial-gradient(circle at center, #06402b 0%, #032116 100%);
+    background-size: cover;
+    background-attachment: fixed;
+    position: relative;
+  }
+
+  .bg-okey-table::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+    opacity: 0.15;
+    pointer-events: none;
+  }
+
+  .table-surface {
+    background: #074d34;
+    border: 12px solid #042d1e;
+    box-shadow:
+      inset 0 0 150px rgba(0, 0, 0, 0.7),
+      0 30px 60px rgba(0, 0, 0, 0.5);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .bg-isteka {
+    background-image: linear-gradient(to bottom, rgba(255, 255, 255, 0.1), rgba(0, 0, 0, 0.4)), url('/images/wood_shelf.png');
+    background-size: cover;
+    box-shadow:
+      0 20px 50px rgba(0, 0, 0, 0.6),
+      inset 0 2px 4px rgba(255, 255, 255, 0.2),
+      inset 0 -8px 20px rgba(0, 0, 0, 0.5);
+    border-radius: 12px;
+  }
+
+  .tile-3d {
+    background: linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%);
+    box-shadow:
+      0 3px 0 #d1d1d1,
+      0 6px 0 #b0b0b0,
+      0 8px 12px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 #fff;
+    transform: translateY(0);
+    transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    user-select: none;
+  }
+
+  .tile-3d.selected {
+    transform: translateY(-28px) scale(1.1);
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.5), 0 0 0 4px #fbbf24;
+    z-index: 100;
+  }
+
+  .glass-hud {
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Circular Timer SVG */
+  .timer-svg {
+    transform: rotate(-90deg);
+  }
+
+  .timer-circle-bg {
+    fill: rgba(0, 0, 0, 0.3);
+    stroke: rgba(255, 255, 255, 0.1);
+    stroke-width: 4;
+  }
+
+  .timer-circle-progress {
+    fill: none;
+    stroke: #10b981;
+    stroke-width: 4;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1s linear, stroke 0.3s ease;
+  }
+
+  .timer-critical {
+    stroke: #ef4444 !important;
+  }
+
+  .timer-warning {
+    stroke: #f59e0b !important;
+  }
+
+  /* Premium Buttons */
+  .btn-premium {
+    @apply shadow-lg border border-white/10 active:scale-95 transition-all font-black uppercase tracking-tight flex items-center justify-center rounded-xl;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  }
+
+  .btn-green {
+    @apply bg-gradient-to-b from-green-500 to-green-700 hover:from-green-400 hover:to-green-600 text-white shadow-[0_4px_0_#15803d];
+  }
+
+  .btn-amber {
+    @apply bg-gradient-to-b from-amber-400 to-amber-600 hover:from-amber-300 hover:to-amber-500 text-black shadow-[0_4px_0_#b45309];
+  }
+
+  .btn-blue {
+    @apply bg-gradient-to-b from-blue-500 to-blue-700 hover:from-blue-400 hover:to-blue-600 text-white shadow-[0_4px_0_#1d4ed8];
+  }
+
+  .btn-red {
+    @apply bg-gradient-to-b from-red-500 to-red-700 hover:from-red-400 hover:to-red-600 text-white shadow-[0_4px_0_#b91c1c];
+  }
+
+  @keyframes float {
+
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+
+    50% {
+      transform: translateY(-5px);
+    }
+  }
+
+  .animate-float {
+    animation: float 3s ease-in-out infinite;
+  }
+
+  @keyframes okey-glow {
+
+    0%,
+    100% {
+      box-shadow: 0 0 15px rgba(251, 191, 36, 0.6);
+      filter: brightness(1);
+    }
+
+    50% {
+      box-shadow: 0 0 35px rgba(251, 191, 36, 1);
+      filter: brightness(1.3);
+    }
+  }
+
+  .animate-okey-glow {
+    animation: okey-glow 1.5s ease-in-out infinite;
+  }
+
+  @keyframes shake {
+
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+
+    25% {
+      transform: translateX(-5px);
+    }
+
+    75% {
+      transform: translateX(5px);
+    }
+  }
+
+  .animate-shake {
+    animation: shake 0.5s ease-in-out;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
