@@ -1,0 +1,11 @@
+{
+    "name": "101okey-root",
+    "private": true,
+    "engines": {
+        "node": ">=18.0.0"
+    },
+    "scripts": {
+        "build": "cd backend && npm install && npm run build && npx prisma generate",
+        "start": "cd backend && npm start"
+    }
+}
