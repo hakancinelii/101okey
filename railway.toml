@@ -1,10 +1,10 @@
 # Railway uses this to build and start the backend
 [build]
 builder = "NIXPACKS"
-buildCommand = "npm install && npm run build && npx prisma generate"
+buildCommand = "cd backend && npm install && npm run build && npx prisma generate"
 
 [deploy]
-startCommand = "npm start"
+startCommand = "cd backend && npm start"
 healthcheckPath = "/api/health"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
