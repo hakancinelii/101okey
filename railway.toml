@@ -1,7 +1,11 @@
 # Railway uses this to build and start the backend
 [build]
 builder = "NIXPACKS"
+watch = ["backend"]
 buildCommand = "cd backend && npm install && npm run build && npx prisma generate"
+
+[build.env]
+NIXPACKS_PATH = "/app/backend"
 
 [deploy]
 startCommand = "cd backend && npm start"
