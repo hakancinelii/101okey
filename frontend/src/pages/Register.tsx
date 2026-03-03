@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { BACKEND_URL } from '../config';
 
 const Register: React.FC = () => {
     const { t } = useTranslation();
@@ -17,7 +18,7 @@ const Register: React.FC = () => {
         setLoading(true);
         setError(null);
         try {
-            const res = await fetch('/api/auth/register', {
+            const res = await fetch(`${BACKEND_URL}/api/auth/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name, email, password }),

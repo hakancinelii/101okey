@@ -9,13 +9,14 @@ import { useTranslation } from 'react-i18next';
  * - If the logged‑in user is admin (role stored in JWT), allows toggling via POST.
  * - Uses Radix UI Switch for a polished look.
  */
+import { BACKEND_URL } from '../config';
+
 const PremiumToggle: React.FC = () => {
     const { t } = useTranslation();
     const [enabled, setEnabled] = useState(false);
     const [isAdmin, setIsAdmin] = useState(false);
     const [loading, setLoading] = useState(true);
 
-    // Helper to extract role from JWT (simple base64 decode, no verification here)
     const getUserRole = () => {
         const token = localStorage.getItem('token');
         if (!token) return null;
@@ -28,10 +29,9 @@ const PremiumToggle: React.FC = () => {
     };
 
     useEffect(() => {
-        // Fetch config
         const fetchConfig = async () => {
             try {
-                const res = await fetch('/api/config');
+                const res = await fetch(`${BACKEND_URL}/api/config`);
                 const data = await res.json();
                 setEnabled(data.premiumEnabled);
                 const role = getUserRole();
@@ -46,11 +46,11 @@ const PremiumToggle: React.FC = () => {
     }, []);
 
     const toggle = async () => {
-        if (!isAdmin) return; // non‑admin cannot change
+        if (!isAdmin) return;
         const newValue = !enabled;
         try {
             const token = localStorage.getItem('token') || '';
-            const res = await fetch('/api/config', {
+            const res = await fetch(`${BACKEND_URL}/api/config`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
