@@ -846,7 +846,7 @@ export const initSocket = (httpServer: HttpServer) => {
 
                 // 2. Handle Timeout (Player or Bot AFK)
                 if (elapsed > 70000) { // 70s timeout (60s + 10s grace)
-                    console.log(`Supervisor: Timeout detected in game ${game.id} (Member ${currentMember.userId}). Forcing move...`);
+                    console.log(`[Game ${game.id}] Supervisor: Timeout for ${currentMember.userId} (Seat ${game.turnIndex}). Forcing move.`);
                     await forceAutoMove(game.id);
                     turnStartTimes.set(game.id, Date.now()); // Reset timer
                     continue;
@@ -998,7 +998,7 @@ export const initSocket = (httpServer: HttpServer) => {
                 }),
                 prisma.gameMember.update({
                     where: { id: currentMember.id },
-                    data: { hand: updatedHand } as any
+                    data: { hand: updatedHand, hasDrawn: false, mustOpen: false } as any
                 }),
                 // Reset drawing state for the NEXT player
                 prisma.gameMember.update({

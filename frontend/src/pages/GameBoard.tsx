@@ -1211,17 +1211,17 @@ const GameBoard: React.FC = () => {
                         <span className="text-[9px] font-black opacity-30 text-center uppercase tracking-widest">DİZİLİM</span>
                         <button
                             onClick={sortSeri}
-                            className="w-16 h-16 btn-premium btn-blue flex flex-col items-center justify-center group"
+                            className="w-12 h-12 btn-premium btn-blue flex flex-col items-center justify-center group"
                         >
-                            <span className="text-xl group-hover:scale-110 transition-transform">🪜</span>
-                            <span className="text-[10px] font-black uppercase mt-1">SERİ</span>
+                            <span className="text-lg group-hover:scale-110 transition-transform">🪜</span>
+                            <span className="text-[8px] font-black uppercase mt-0.5">SERİ</span>
                         </button>
                         <button
                             onClick={sortCift}
-                            className="w-16 h-16 btn-premium btn-blue flex flex-col items-center justify-center group"
+                            className="w-12 h-12 btn-premium btn-blue flex flex-col items-center justify-center group"
                         >
-                            <span className="text-xl group-hover:scale-110 transition-transform">👥</span>
-                            <span className="text-[10px] font-black uppercase mt-1">ÇİFT</span>
+                            <span className="text-lg group-hover:scale-110 transition-transform">👥</span>
+                            <span className="text-[8px] font-black uppercase mt-0.5">ÇİFT</span>
                         </button>
                     </div>
 
@@ -1230,10 +1230,10 @@ const GameBoard: React.FC = () => {
                         <button
                             onClick={undoDrawDiscard}
                             disabled={!mustOpen}
-                            className={`w-16 h-12 btn-premium btn-red flex flex-col items-center justify-center transition-all ${!mustOpen ? 'opacity-20 grayscale cursor-not-allowed' : 'animate-pulse'}`}
+                            className={`w-12 h-10 btn-premium btn-red flex flex-col items-center justify-center transition-all ${!mustOpen ? 'opacity-20 grayscale cursor-not-allowed' : 'animate-pulse'}`}
                         >
-                            <span className="text-sm">↩</span>
-                            <span className="text-[8px] font-black uppercase">GERİ VER</span>
+                            <span className="text-xs">↩</span>
+                            <span className="text-[7px] font-black uppercase">GERİ</span>
                         </button>
                     </div>
                 </div>
@@ -1257,28 +1257,30 @@ const GameBoard: React.FC = () => {
                 {/* Right Side Buttons (Game Actions) */}
                 <div className="flex flex-col space-y-2 ml-4">
                     <div className="flex flex-col space-y-1">
-                        <span className="text-[8px] font-black opacity-30 text-center uppercase tracking-widest">HAMLE</span>
-                        <button
-                            onClick={addGroup}
-                            className="w-14 h-14 btn-premium btn-green shadow-green-500/20 flex flex-col items-center justify-center group"
-                        >
-                            <span className="text-xl group-hover:scale-110 transition-transform">📦</span>
-                            <span className="text-[8px] font-black uppercase mt-0.5 leading-tight">{t('addGroup')}</span>
-                        </button>
-                        <button
-                            onClick={async () => {
-                                if (pendingSets.length === 0) return alert(t('noSetsToOpen'));
-                                await placeSets(pendingSets);
-                            }}
-                            className="w-14 h-14 btn-premium btn-amber shadow-amber-500/20 flex flex-col items-center justify-center group"
-                        >
-                            <span className="text-xl group-hover:scale-110 transition-transform">📤</span>
-                            <span className="text-[8px] font-black uppercase mt-0.5 leading-tight">{t('placeOnTable')}</span>
-                        </button>
+                        <span className="text-[8px] font-black opacity-30 text-center uppercase tracking-widest leading-none">HAMLE</span>
+                        <div className="grid grid-cols-1 gap-1">
+                            <button
+                                onClick={addGroup}
+                                className="w-12 h-12 btn-premium btn-green shadow-green-500/20 flex flex-col items-center justify-center group"
+                            >
+                                <span className="text-lg group-hover:scale-110 transition-transform">📦</span>
+                                <span className="text-[7px] font-black uppercase mt-0.5 leading-tight">{t('addGroup')}</span>
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    if (pendingSets.length === 0) return alert(t('noSetsToOpen'));
+                                    await placeSets(pendingSets);
+                                }}
+                                className="w-12 h-12 btn-premium btn-amber shadow-amber-500/20 flex flex-col items-center justify-center group"
+                            >
+                                <span className="text-lg group-hover:scale-110 transition-transform">📤</span>
+                                <span className="text-[7px] font-black uppercase mt-0.5 leading-tight">{t('placeOnTable')}</span>
+                            </button>
+                        </div>
                     </div>
 
                     <div className="flex flex-col space-y-1">
-                        <span className="text-[8px] font-black opacity-30 text-center uppercase tracking-widest">BİTİR</span>
+                        <span className="text-[8px] font-black opacity-30 text-center uppercase tracking-widest leading-none">BİTİR</span>
                         <button
                             id="discard-zone"
                             onClick={async () => {
@@ -1287,9 +1289,9 @@ const GameBoard: React.FC = () => {
                                 await discardTile(tileId);
                                 setSelectedTileIds(new Set());
                             }}
-                            className="w-14 h-14 btn-premium btn-red shadow-red-500/40 flex flex-col items-center justify-center group uppercase"
+                            className="w-12 h-12 btn-premium btn-red shadow-red-500/40 flex flex-col items-center justify-center group uppercase"
                         >
-                            <span className="text-xl group-hover:-translate-y-1 transition-transform">🗑️</span>
+                            <span className="text-lg group-hover:-translate-y-1 transition-transform">🗑️</span>
                             <span className="font-black text-[8px] mt-0.5">{t('discardAction')}</span>
                         </button>
                     </div>
