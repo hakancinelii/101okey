@@ -140,7 +140,7 @@ const GameBoard: React.FC = () => {
 
             // IMPORTANT: Filter out tiles that are already in pending sets to avoid duplicates
             const pendingIds = new Set(pendingSets.flat().map(t => t.id));
-            const filteredHand = Array.isArray(state.hand) ? state.hand.filter(t => !pendingIds.has(t.id)) : [];
+            const filteredHand = Array.isArray(state.hand) ? (state.hand as Tile[]).filter((t: Tile) => !pendingIds.has(t.id)) : [];
             setHand(filteredHand);
 
             // Sync rack slots with filtered hand
@@ -148,10 +148,10 @@ const GameBoard: React.FC = () => {
                 const next = [...prev];
                 // Remove tiles no longer in hand
                 next.forEach((slot, i) => {
-                    if (slot && !filteredHand.find(t => t.id === slot.id)) next[i] = null;
+                    if (slot && !filteredHand.find((t: Tile) => t.id === slot.id)) next[i] = null;
                 });
                 // Add new tiles
-                filteredHand.forEach(tile => {
+                filteredHand.forEach((tile: Tile) => {
                     if (!next.find(s => s?.id === tile.id)) {
                         const emptyIdx = next.indexOf(null);
                         if (emptyIdx !== -1) next[emptyIdx] = tile;
