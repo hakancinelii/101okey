@@ -25,7 +25,12 @@ const Lobby: React.FC = () => {
     const { lobbyId } = useParams<{ lobbyId: string }>();
     const [members, setMembers] = useState<Member[]>([]);
     const [ready, setReady] = useState(false);
-    const [maxRounds, setMaxRounds] = useState(3);
+    const [settings, setSettings] = useState({
+        maxRounds: 3,
+        turnTime: 60,
+        gameMode: 'NORMAL',
+        startingScore: 101
+    });
     const [isHost, setIsHost] = useState(false);
     const [chat, setChat] = useState<ChatMessage[]>([]);
     const [msgInput, setMsgInput] = useState('');
@@ -70,12 +75,17 @@ const Lobby: React.FC = () => {
             });
         });
 
-        socket.on('lobbyUpdate', (updatedMembers: Member[]) => {
+        socket.on('lobbyUpdate', (data: any) => {
+            const updatedMembers = data.members || [];
+            const updatedSettings = data.settings || settings;
+
             setMembers(updatedMembers);
+            setSettings(updatedSettings);
+
             const me = getUserInfo();
-            const myMember = updatedMembers.find(m => m.id === me.id);
+            const myMember = updatedMembers.find((m: any) => m.id === me.id);
             if (myMember) setReady(myMember.ready);
-            const hostMember = updatedMembers.find((m) => m.host);
+            const hostMember = updatedMembers.find((m: any) => m.host);
             setIsHost(hostMember?.id === me.id);
         });
 
@@ -102,9 +112,16 @@ const Lobby: React.FC = () => {
         socketRef.current.emit('setReady', { lobbyId, isReady: !ready });
     };
 
+    const updateSettings = (newSettings: any) => {
+        if (!socketRef.current || !isHost || !lobbyId) return;
+        socketRef.current.emit('updateSettings', { lobbyId, settings: { ...settings, ...newSettings } }, (err?: string) => {
+            if (err) alert(err);
+        });
+    };
+
     const startGame = () => {
         if (!socketRef.current || !lobbyId) return;
-        socketRef.current.emit('startGame', lobbyId, { maxRounds }, (err?: string) => {
+        socketRef.current.emit('startGame', lobbyId, {}, (err?: string) => {
             if (err) alert(err);
         });
     };
@@ -241,27 +258,81 @@ const Lobby: React.FC = () => {
                         )}
                     </div>
 
-                    {isHost && (
-                        <div className="glass-hud rounded-[24px] p-6 border border-white/10 flex flex-col space-y-4 animate-in slide-in-from-left duration-700">
-                            <div className="flex items-center justify-between">
-                                <span className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">Oyun Ayarları</span>
-                                <span className="text-amber-500 text-[10px] font-black uppercase tracking-widest">{maxRounds} EL OYNANACAK</span>
+                    <div className="glass-hud rounded-[24px] p-6 border border-white/10 flex flex-col space-y-6 animate-in slide-in-from-left duration-700">
+                        <div className="flex items-center justify-between border-b border-white/5 pb-4">
+                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-500">Gelişmiş Oyun Ayarları</span>
+                        </div>
+
+                        {/* Rounds */}
+                        <div className="flex flex-col space-y-3">
+                            <div className="flex justify-between items-center px-1">
+                                <span className="text-[11px] font-black uppercase tracking-widest text-white/40">Maksimum El</span>
+                                <span className="text-amber-500 text-[10px] font-black uppercase">{settings.maxRounds} EL</span>
                             </div>
-                            <div className="flex items-center space-x-3">
-                                <span className="text-[11px] font-black uppercase tracking-widest text-white/40 mr-4">Maksimum El:</span>
+                            <div className="flex items-center space-x-2">
                                 {[1, 3, 5, 7].map(r => (
                                     <button
                                         key={r}
-                                        onClick={() => setMaxRounds(r)}
-                                        className={`w-12 h-12 rounded-xl border flex items-center justify-center font-black transition-all
-                                             ${maxRounds === r ? 'bg-amber-500 border-amber-400 text-black shadow-lg scale-110' : 'bg-white/5 border-white/5 text-white/40 hover:bg-white/10'}`}
+                                        disabled={!isHost}
+                                        onClick={() => updateSettings({ maxRounds: r })}
+                                        className={`flex-1 h-10 rounded-xl border flex items-center justify-center font-black transition-all text-xs
+                                             ${settings.maxRounds === r ? 'bg-amber-500 border-amber-400 text-black shadow-lg' : 'bg-white/5 border-white/5 text-white/40 hover:bg-white/10'}`}
                                     >
                                         {r}
                                     </button>
                                 ))}
                             </div>
                         </div>
-                    )}
+
+                        {/* Turn Time */}
+                        <div className="flex flex-col space-y-3">
+                            <div className="flex justify-between items-center px-1">
+                                <span className="text-[11px] font-black uppercase tracking-widest text-white/40">Sıra Süresi</span>
+                                <span className="text-amber-500 text-[10px] font-black uppercase">{settings.turnTime} SN</span>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                {[30, 60, 90, 120].map(t => (
+                                    <button
+                                        key={t}
+                                        disabled={!isHost}
+                                        onClick={() => updateSettings({ turnTime: t })}
+                                        className={`flex-1 h-10 rounded-xl border flex items-center justify-center font-black transition-all text-xs
+                                             ${settings.turnTime === t ? 'bg-amber-500 border-amber-400 text-black shadow-lg' : 'bg-white/5 border-white/5 text-white/40 hover:bg-white/10'}`}
+                                    >
+                                        {t}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4 pt-2">
+                            {/* Game Mode */}
+                            <div className="flex flex-col space-y-3">
+                                <span className="text-[11px] font-black uppercase tracking-widest text-white/40 px-1">Oyun Modu</span>
+                                <button
+                                    disabled={!isHost}
+                                    onClick={() => updateSettings({ gameMode: settings.gameMode === 'NORMAL' ? 'FOLDING' : 'NORMAL' })}
+                                    className={`h-11 rounded-xl border flex items-center justify-center font-black transition-all text-[10px] uppercase tracking-widest
+                                        ${settings.gameMode === 'FOLDING' ? 'bg-amber-500 border-amber-400 text-black' : 'bg-white/5 border-white/5 text-white/40'}`}
+                                >
+                                    {settings.gameMode === 'FOLDING' ? '🔥 KATLAMALI' : 'NORMAL'}
+                                </button>
+                            </div>
+
+                            {/* Starting Score */}
+                            <div className="flex flex-col space-y-3">
+                                <span className="text-[11px] font-black uppercase tracking-widest text-white/40 px-1">Baraj Puanı</span>
+                                <button
+                                    disabled={!isHost}
+                                    onClick={() => updateSettings({ startingScore: settings.startingScore === 101 ? 202 : 101 })}
+                                    className={`h-11 rounded-xl border flex items-center justify-center font-black transition-all text-[10px] uppercase tracking-widest
+                                        ${settings.startingScore === 202 ? 'bg-blue-500 border-blue-400 text-white' : 'bg-white/5 border-white/5 text-white/40'}`}
+                                >
+                                    {settings.startingScore} PUAN
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Right Side: Chat */}
