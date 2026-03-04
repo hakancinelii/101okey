@@ -456,6 +456,9 @@ export const initSocket = (httpServer: HttpServer) => {
                 )
             ]);
 
+            // Reset turn timer for the first player of the round
+            turnStartTimes.set(gameId, Date.now());
+
             const allSockets = await io.in(gameId).fetchSockets();
             for (const s of allSockets) {
                 const sUserId = (s as any).user?.userId;

@@ -163,6 +163,15 @@ const GameBoard: React.FC = () => {
             }
             if (state.members) setMembers(state.members);
             if (state.lastDiscard !== undefined) setLastDiscard(state.lastDiscard);
+
+            // Sync drawing state: if turn is mine and I have 22 tiles, I must have already 'drawn'
+            const myInfo = getUserInfo();
+            if (state.turnIndex !== undefined && state.members) {
+                const myIdxInState = state.members.findIndex((m: any) => m.userId === myInfo.userId);
+                if (state.turnIndex === myIdxInState && state.hand && state.hand.length === 22) {
+                    setHasDrawn(true);
+                }
+            }
         });
 
         // Receiving gameStarted event in GameBoard in case of re-connect or late emit
@@ -184,6 +193,13 @@ const GameBoard: React.FC = () => {
             if (data.members) setMembers(data.members);
             if (data.currentRound) setCurrentRound(data.currentRound);
             if (data.maxRounds) setMaxRounds(data.maxRounds);
+
+            // Sync drawing state for new game started
+            const myInfo = getUserInfo();
+            const myIdxInData = data.members?.findIndex((m: any) => m.userId === myInfo.userId);
+            if (data.turnIndex === myIdxInData && data.hand && data.hand.length === 22) {
+                setHasDrawn(true);
+            }
         });
 
 
@@ -1239,38 +1255,30 @@ const GameBoard: React.FC = () => {
                 </div>
 
                 {/* Right Side Buttons (Game Actions) */}
-                <div className="flex flex-col space-y-3 ml-6">
-                    {selectedTileIds.size > 0 && (
-                        <div className="absolute -top-10 right-0 animate-bounce">
-                            <div className="bg-amber-500 text-black text-[10px] font-bold px-3 py-1 rounded-full shadow-lg border border-amber-400">
-                                {selectedTileIds.size} TAŞ SEÇİLDİ
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="flex flex-col space-y-2">
-                        <span className="text-[9px] font-black opacity-30 text-center uppercase tracking-widest">HAMLE</span>
+                <div className="flex flex-col space-y-2 ml-4">
+                    <div className="flex flex-col space-y-1">
+                        <span className="text-[8px] font-black opacity-30 text-center uppercase tracking-widest">HAMLE</span>
                         <button
                             onClick={addGroup}
-                            className="w-16 h-16 btn-premium btn-green shadow-green-500/20 flex flex-col items-center justify-center group"
+                            className="w-14 h-14 btn-premium btn-green shadow-green-500/20 flex flex-col items-center justify-center group"
                         >
-                            <span className="text-2xl group-hover:scale-110 transition-transform">📦</span>
-                            <span className="text-[9px] font-black uppercase mt-0.5 leading-tight">{t('addGroup')}</span>
+                            <span className="text-xl group-hover:scale-110 transition-transform">📦</span>
+                            <span className="text-[8px] font-black uppercase mt-0.5 leading-tight">{t('addGroup')}</span>
                         </button>
                         <button
                             onClick={async () => {
                                 if (pendingSets.length === 0) return alert(t('noSetsToOpen'));
                                 await placeSets(pendingSets);
                             }}
-                            className="w-16 h-16 btn-premium btn-amber shadow-amber-500/20 flex flex-col items-center justify-center group"
+                            className="w-14 h-14 btn-premium btn-amber shadow-amber-500/20 flex flex-col items-center justify-center group"
                         >
-                            <span className="text-2xl group-hover:scale-110 transition-transform">📤</span>
-                            <span className="text-[9px] font-black uppercase mt-0.5 leading-tight">{t('placeOnTable')}</span>
+                            <span className="text-xl group-hover:scale-110 transition-transform">📤</span>
+                            <span className="text-[8px] font-black uppercase mt-0.5 leading-tight">{t('placeOnTable')}</span>
                         </button>
                     </div>
 
                     <div className="flex flex-col space-y-1">
-                        <span className="text-[9px] font-black opacity-30 text-center uppercase tracking-widest">BİTİR</span>
+                        <span className="text-[8px] font-black opacity-30 text-center uppercase tracking-widest">BİTİR</span>
                         <button
                             id="discard-zone"
                             onClick={async () => {
@@ -1279,10 +1287,10 @@ const GameBoard: React.FC = () => {
                                 await discardTile(tileId);
                                 setSelectedTileIds(new Set());
                             }}
-                            className="w-16 h-16 btn-premium btn-red shadow-red-500/40 flex flex-col items-center justify-center group uppercase"
+                            className="w-14 h-14 btn-premium btn-red shadow-red-500/40 flex flex-col items-center justify-center group uppercase"
                         >
-                            <span className="text-2xl group-hover:-translate-y-1 transition-transform">🗑️</span>
-                            <span className="font-black text-[10px] mt-0.5">{t('discardAction')}</span>
+                            <span className="text-xl group-hover:-translate-y-1 transition-transform">🗑️</span>
+                            <span className="font-black text-[8px] mt-0.5">{t('discardAction')}</span>
                         </button>
                     </div>
                 </div>
