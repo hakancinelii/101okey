@@ -21,6 +21,7 @@ interface Tile {
 interface Member {
     userId: string;
     name: string;
+    seat: number;
     openScore?: number;
     openSets?: Tile[][];
     penaltyScore?: number;
@@ -178,8 +179,8 @@ const GameBoard: React.FC = () => {
             // Fallback sync drawing state: if turn is mine and I have 22 tiles, I must have drawn
             const myInfo = getUserInfo();
             if (state.turnIndex !== undefined && state.members) {
-                const myIdxInState = Array.isArray(state.members) ? state.members.findIndex((m: any) => m.userId === myInfo.userId) : -1;
-                if (state.turnIndex === myIdxInState && state.hasDrawn === undefined) {
+                const myMember = Array.isArray(state.members) ? state.members.find((m: any) => m.userId === myInfo.userId) : null;
+                if (myMember && state.turnIndex === myMember.seat && state.hasDrawn === undefined) {
                     if (state.hand) {
                         setHasDrawn(state.hand.length > 21);
                     }
@@ -212,8 +213,8 @@ const GameBoard: React.FC = () => {
             if ((data as any).mustOpen !== undefined) setMustOpen((data as any).mustOpen);
 
             const myInfo = getUserInfo();
-            const myIdxInData = Array.isArray(data.members) ? data.members.findIndex((m: any) => m.userId === myInfo.userId) : -1;
-            if (data.turnIndex === myIdxInData && (data as any).hasDrawn === undefined) {
+            const myMemberInData = Array.isArray(data.members) ? data.members.find((m: any) => m.userId === myInfo.userId) : null;
+            if (myMemberInData && data.turnIndex === myMemberInData.seat && (data as any).hasDrawn === undefined) {
                 if (data.hand) setHasDrawn(data.hand.length > 21);
             }
         });
@@ -690,6 +691,8 @@ const GameBoard: React.FC = () => {
 
     const myId = getUserInfo().userId;
     const myIndex = Array.isArray(members) ? members.findIndex(m => m.userId === myId) : -1;
+    const myMember = Array.isArray(members) ? members.find(m => m.userId === myId) : null;
+    const mySeat = myMember?.seat ?? -1;
 
     const getPlayerByRelativePos = (pos: number) => {
         if (members.length === 0) return null;
@@ -876,7 +879,7 @@ const GameBoard: React.FC = () => {
         );
     };
 
-    const isMyTurn = turnIndex === myIndex;
+    const isMyTurn = turnIndex === mySeat;
 
     return (
         <div className={`h-screen w-screen bg-okey-table flex flex-col overflow-hidden text-white font-sans transition-all duration-700 ${isMyTurn ? 'ring-inset ring-8 ring-green-500/20' : ''}`}>
@@ -999,10 +1002,10 @@ const GameBoard: React.FC = () => {
 
                 {/* Player Spots - Modern Circular Design */}
                 <div className="absolute inset-0 max-w-7xl mx-auto pointer-events-none">
-                    <PlayerSpot player={getPlayerByRelativePos(0)} isTurn={turnIndex === myIndex} relativePos={0} />
-                    <PlayerSpot player={getPlayerByRelativePos(1)} isTurn={turnIndex === (myIndex + 1) % members.length} relativePos={1} />
-                    <PlayerSpot player={getPlayerByRelativePos(2)} isTurn={turnIndex === (myIndex + 2) % members.length} relativePos={2} />
-                    <PlayerSpot player={getPlayerByRelativePos(3)} isTurn={turnIndex === (myIndex + 3) % members.length} relativePos={3} />
+                    <PlayerSpot player={getPlayerByRelativePos(0)} isTurn={turnIndex === (getPlayerByRelativePos(0)?.seat ?? -1)} relativePos={0} />
+                    <PlayerSpot player={getPlayerByRelativePos(1)} isTurn={turnIndex === (getPlayerByRelativePos(1)?.seat ?? -1)} relativePos={1} />
+                    <PlayerSpot player={getPlayerByRelativePos(2)} isTurn={turnIndex === (getPlayerByRelativePos(2)?.seat ?? -1)} relativePos={2} />
+                    <PlayerSpot player={getPlayerByRelativePos(3)} isTurn={turnIndex === (getPlayerByRelativePos(3)?.seat ?? -1)} relativePos={3} />
                 </div>
 
                 {/* ====== DISCARD PILE - centered on table ====== */}
@@ -1269,8 +1272,8 @@ const GameBoard: React.FC = () => {
                             </span>
                         </div>
                         <div className="w-[1px] h-3 bg-white/20"></div>
-                        <span className={`text-[10px] font-black flex items-center ${turnIndex === myIndex ? 'text-green-400' : 'text-white/40'}`}>
-                            {turnIndex === myIndex ? t('yourTurnMsg') : t('opponentTurnMsg')}
+                        <span className={`text-[10px] font-black flex items-center ${isMyTurn ? 'text-green-400' : 'text-white/40'}`}>
+                            {isMyTurn ? t('yourTurnMsg') : t('opponentTurnMsg')}
                         </span>
                     </div>
                 </div>

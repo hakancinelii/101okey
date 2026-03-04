@@ -238,11 +238,15 @@ export const initSocket = (httpServer: HttpServer) => {
                     include: { members: { orderBy: { seat: 'asc' } } }
                 });
                 if (!game || game.status !== 'ACTIVE') return;
-                const currentMember = game.members[game.turnIndex];
+
+                const members = game.members;
+                const currentMember = members.find(m => m.seat === game.turnIndex);
                 if (!currentMember) return;
+
                 let pool = (game.tilePool as any) || [];
                 let currentHand = (currentMember.hand as any) || [];
                 let hasDrawn = currentMember.hasDrawn;
+
                 if (!hasDrawn) {
                     if (pool.length > 0) {
                         const tile = pool.shift();
@@ -253,8 +257,15 @@ export const initSocket = (httpServer: HttpServer) => {
                         return;
                     }
                 }
+
+                // AI-like discard for force move: discard the last tile (usually toughest to fit)
                 const discardedTile = currentHand.pop();
-                const nextTurn = (game.turnIndex + 1) % game.members.length;
+
+                // Robust next turn calculation
+                const currIdx = members.findIndex(m => m.seat === game.turnIndex);
+                const nextMember = members[(currIdx + 1) % members.length];
+                const nextTurn = nextMember.seat;
+
                 await prisma.$transaction([
                     prisma.game.update({
                         where: { id: gameId },
@@ -265,16 +276,18 @@ export const initSocket = (httpServer: HttpServer) => {
                         data: { hand: currentHand, hasDrawn: false, mustOpen: false } as any
                     }),
                     prisma.gameMember.update({
-                        where: { id: game.members[nextTurn].id },
+                        where: { id: nextMember.id },
                         data: { hasDrawn: false, mustOpen: false } as any
                     })
                 ]);
+
                 await updateGameCache(gameId);
                 io.to(gameId).emit('poolUpdate', { deckCount: pool.length });
                 io.to(gameId).emit('tileDiscarded', { userId: currentMember.userId, tile: discardedTile });
                 io.to(gameId).emit('turnUpdate', { turnIndex: nextTurn });
+
                 turnStartTimes.set(gameId, Date.now());
-                setTimeout(() => checkAndProcessBotTurn(gameId), 2000);
+                setTimeout(() => checkAndProcessBotTurn(gameId), 3000);
             } catch (e) {
                 console.error('Error in forceAutoMove:', e);
             }
@@ -294,21 +307,27 @@ export const initSocket = (httpServer: HttpServer) => {
                     botProcessingLock.delete(gameId);
                     return;
                 }
-                const currentMember = game.members[game.turnIndex];
+
+                const members = game.members;
+                const currentMember = members.find(m => m.seat === game.turnIndex);
                 if (!currentMember || !currentMember.isBot) {
                     botProcessingLock.delete(gameId);
                     return;
                 }
+
                 const pool = (game.tilePool as any) || [];
                 if (pool.length === 0) {
                     await handleGameFinish(gameId, 'DEST_BITTI');
                     botProcessingLock.delete(gameId);
                     return;
                 }
+
                 const currentHand = (currentMember.hand as any) || [];
                 const drawnTile = pool.shift();
                 const updatedHand = [...currentHand, drawnTile];
                 const okeyTile = game.okeyTile as any;
+
+                // Simple Bot Logic: Discard a non-okey tile
                 let discardIndex = 0;
                 if (updatedHand.length > 1) {
                     const nonOkeyIdx = updatedHand.findIndex(t => !(t.color === okeyTile.color && t.number === okeyTile.number));
@@ -316,7 +335,12 @@ export const initSocket = (httpServer: HttpServer) => {
                 }
                 const discardedTile = updatedHand[discardIndex];
                 updatedHand.splice(discardIndex, 1);
-                const nextTurn = (game.turnIndex + 1) % game.members.length;
+
+                // Robust next turn
+                const currIdx = members.findIndex(m => m.seat === game.turnIndex);
+                const nextMember = members[(currIdx + 1) % members.length];
+                const nextTurn = nextMember.seat;
+
                 await prisma.$transaction([
                     prisma.game.update({
                         where: { id: gameId },
@@ -327,19 +351,20 @@ export const initSocket = (httpServer: HttpServer) => {
                         data: { hand: updatedHand, hasDrawn: false, mustOpen: false } as any
                     }),
                     prisma.gameMember.update({
-                        where: { id: game.members[nextTurn].id },
+                        where: { id: nextMember.id },
                         data: { hasDrawn: false, mustOpen: false } as any
                     })
                 ]);
+
                 io.to(gameId).emit('poolUpdate', { deckCount: pool.length });
                 io.to(gameId).emit('tileDiscarded', { userId: currentMember.userId, tile: discardedTile });
                 io.to(gameId).emit('turnUpdate', { turnIndex: nextTurn });
+
                 turnStartTimes.set(gameId, Date.now());
                 botProcessingLock.delete(gameId);
-                const nextMember = game.members[nextTurn];
+
                 if (nextMember && nextMember.isBot) {
-                    // Consistent 3-5s for bot->bot
-                    setTimeout(() => checkAndProcessBotTurn(gameId), 3000 + Math.random() * 2000);
+                    setTimeout(() => checkAndProcessBotTurn(gameId), 4000 + Math.random() * 2000);
                 }
                 await updateGameCache(gameId);
             } catch (e) {
@@ -353,7 +378,7 @@ export const initSocket = (httpServer: HttpServer) => {
         try {
             const activeGames = await prisma.game.findMany({
                 where: { status: 'ACTIVE' },
-                include: { members: true }
+                include: { members: { orderBy: { seat: 'asc' } } }
             });
             for (const game of activeGames) {
                 const startTime = turnStartTimes.get(game.id);
@@ -366,7 +391,7 @@ export const initSocket = (httpServer: HttpServer) => {
                         console.log(`[Supervisor] Timeout for game ${game.id}. Forcing move.`);
                         forceAutoMove(game.id).catch(e => console.error(e));
                     } else {
-                        const currentMember = game.members[game.turnIndex];
+                        const currentMember = game.members.find(m => m.seat === game.turnIndex);
                         // If bot is stuck for more than 15s, poke it
                         if (currentMember && currentMember.isBot && elapsed > 15000) {
                             console.log(`[Supervisor] Bot boost for game ${game.id}`);
@@ -1065,7 +1090,10 @@ export const initSocket = (httpServer: HttpServer) => {
                     if (!discardedTile) return callback?.('Taş elinizde bulunamadı');
                     const updatedHand = currentHand.filter((t: any) => t.id !== tileId);
 
-                    const nextTurn = (game.turnIndex + 1) % game.members.length;
+                    // Robust next turn calculation
+                    const currIdx = game.members.findIndex((m: any) => m.seat === game.turnIndex);
+                    const nextMember = game.members[(currIdx + 1) % game.members.length];
+                    const nextTurn = nextMember.seat;
 
                     await prisma.$transaction([
                         prisma.gameMember.update({ where: { id: member.id }, data: { hand: updatedHand, hasDrawn: false, mustOpen: false } as any }),
@@ -1077,7 +1105,7 @@ export const initSocket = (httpServer: HttpServer) => {
                             } as any
                         }),
                         prisma.gameMember.update({
-                            where: { id: game.members[nextTurn].id },
+                            where: { id: nextMember.id },
                             data: { hasDrawn: false, mustOpen: false } as any
                         })
                     ]);
@@ -1087,7 +1115,7 @@ export const initSocket = (httpServer: HttpServer) => {
 
                     turnStartTimes.set(activeGameId, Date.now());
 
-                    setTimeout(() => checkAndProcessBotTurn(activeGameId), 3000 + Math.random() * 2000);
+                    setTimeout(() => checkAndProcessBotTurn(activeGameId), 4000 + Math.random() * 2000);
 
                     await updateGameCache(activeGameId);
                     callback?.();
