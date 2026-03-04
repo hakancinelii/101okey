@@ -152,12 +152,16 @@ function isRateLimited(socketId: string, eventName: string): boolean {
 
 // Helper to push the latest game state to Redis (as JSON string)
 async function updateGameCache(gameId: string) {
-    const game = await prisma.game.findUnique({
-        where: { id: gameId },
-        include: { members: true, moves: false }
-    });
-    if (!game) return;
-    await redis.set(`game:${gameId}`, JSON.stringify(game));
+    try {
+        const game = await prisma.game.findUnique({
+            where: { id: gameId },
+            include: { members: true, moves: false }
+        });
+        if (!game) return;
+        await redis.set(`game:${gameId}`, JSON.stringify(game));
+    } catch (e) {
+        console.error('Redis Cache Update Error (Non-blocking):', e);
+    }
 }
 
 
@@ -866,15 +870,24 @@ export const initSocket = (httpServer: HttpServer) => {
             try {
                 // Try cache first
                 let game: any;
-                const cached = await redis.get(`game:${gameId}`);
-                if (cached) {
-                    game = JSON.parse(cached);
-                } else {
+                try {
+                    const cached = await redis.get(`game:${gameId}`);
+                    if (cached) {
+                        game = JSON.parse(cached);
+                    }
+                } catch (e) {
+                    console.warn('Redis read failed, falling back to DB:', e);
+                }
+
+                if (!game) {
                     game = await prisma.game.findUnique({
                         where: { id: gameId },
                         include: { members: { include: { user: true } } }
                     });
-                    if (game) await updateGameCache(gameId);
+                    if (game) {
+                        // Attempt to update cache (will be caught by try-catch in updateGameCache)
+                        await updateGameCache(gameId);
+                    }
                 }
 
                 if (!game || game.status !== 'ACTIVE') return callback?.('Game not found or not active');
