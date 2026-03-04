@@ -76,17 +76,27 @@ const Lobby: React.FC = () => {
         });
 
         socket.on('lobbyUpdate', (data: any) => {
-            const updatedMembers = data.members || [];
-            const updatedSettings = data.settings || settings;
+            if (!data) return;
+            let updatedMembers: Member[] = [];
+            let updatedSettings = settings;
+
+            if (Array.isArray(data)) {
+                updatedMembers = data;
+            } else {
+                updatedMembers = data.members || [];
+                updatedSettings = data.settings || settings;
+            }
 
             setMembers(updatedMembers);
             setSettings(updatedSettings);
 
             const me = getUserInfo();
-            const myMember = updatedMembers.find((m: any) => m.id === me.id);
-            if (myMember) setReady(myMember.ready);
-            const hostMember = updatedMembers.find((m: any) => m.host);
-            setIsHost(hostMember?.id === me.id);
+            if (Array.isArray(updatedMembers)) {
+                const myMember = updatedMembers.find((m: any) => m.id === me.id);
+                if (myMember) setReady(myMember.ready);
+                const hostMember = updatedMembers.find((m: any) => m.host);
+                setIsHost(hostMember?.id === me.id);
+            }
         });
 
         socket.on('readyStatus', (status: boolean) => setReady(status));

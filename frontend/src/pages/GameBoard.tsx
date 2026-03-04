@@ -135,30 +135,31 @@ const GameBoard: React.FC = () => {
         });
 
         // Receive periodic game state or updates
-        socket.on('gameState', (state: { hand: Tile[]; deckCount: number; okeyTile: Tile; turnIndex: number; members: Member[]; lastDiscard?: Tile }) => {
-            if (state.hand) {
-                // IMPORTANT: Filter out tiles that are already in pending sets to avoid duplicates
-                const pendingIds = new Set(pendingSets.flat().map(t => t.id));
-                const filteredHand = state.hand.filter(t => !pendingIds.has(t.id));
-                setHand(filteredHand);
+        socket.on('gameState', (state: any) => {
+            if (!state || !state.hand) return;
 
-                // Sync rack slots with filtered hand
-                setRackSlots(prev => {
-                    const next = [...prev];
-                    // Remove tiles no longer in hand
-                    next.forEach((slot, i) => {
-                        if (slot && !filteredHand.find(t => t.id === slot.id)) next[i] = null;
-                    });
-                    // Add new tiles
-                    filteredHand.forEach(tile => {
-                        if (!next.find(s => s?.id === tile.id)) {
-                            const emptyIdx = next.indexOf(null);
-                            if (emptyIdx !== -1) next[emptyIdx] = tile;
-                        }
-                    });
-                    return next;
+            // IMPORTANT: Filter out tiles that are already in pending sets to avoid duplicates
+            const pendingIds = new Set(pendingSets.flat().map(t => t.id));
+            const filteredHand = Array.isArray(state.hand) ? state.hand.filter(t => !pendingIds.has(t.id)) : [];
+            setHand(filteredHand);
+
+            // Sync rack slots with filtered hand
+            setRackSlots(prev => {
+                const next = [...prev];
+                // Remove tiles no longer in hand
+                next.forEach((slot, i) => {
+                    if (slot && !filteredHand.find(t => t.id === slot.id)) next[i] = null;
                 });
-            }
+                // Add new tiles
+                filteredHand.forEach(tile => {
+                    if (!next.find(s => s?.id === tile.id)) {
+                        const emptyIdx = next.indexOf(null);
+                        if (emptyIdx !== -1) next[emptyIdx] = tile;
+                    }
+                });
+                return next;
+            });
+
             if (state.deckCount !== undefined) setDeckCount(state.deckCount);
             if (state.okeyTile) setOkeyTile(state.okeyTile);
             if (state.turnIndex !== undefined) {
@@ -168,7 +169,9 @@ const GameBoard: React.FC = () => {
             if (state.members) setMembers(state.members);
             if (state.lastDiscard !== undefined) setLastDiscard(state.lastDiscard);
 
-            // Sync drawing state: if turn is mine and I have 22 tiles, I must have already 'drawn'
+            // Sync drawing state: if turn is mine and I have 15 tiles (or 16 if currently my turn), adjust hasDrawn
+            // 101 Okey: 21 tiles + 1 drawn = 22. Wait, the logic here mentions 22. 
+            // Standard 101: 21 tiles, one player starts with 22.
             const myInfo = getUserInfo();
             if (state.turnIndex !== undefined && state.members) {
                 const myIdxInState = state.members.findIndex((m: any) => m.userId === myInfo.userId);
