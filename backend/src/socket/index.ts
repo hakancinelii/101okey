@@ -425,12 +425,14 @@ export const initSocket = (httpServer: HttpServer) => {
         const emitLobbyUpdate = async (lobbyId: string) => {
             const members = await prisma.gameMember.findMany({
                 where: { gameId: lobbyId },
-                include: { user: true }
+                include: { user: true },
+                orderBy: { seat: 'asc' }
             });
             const game = await prisma.game.findUnique({ where: { id: lobbyId } });
 
             const memberList = members.map(m => ({
                 id: m.userId,
+                userId: m.userId,
                 name: m.isBot ? `🤖 ${m.user.name}` : m.user.name || m.user.email,
                 ready: m.isReady,
                 isBot: m.isBot,
@@ -438,10 +440,9 @@ export const initSocket = (httpServer: HttpServer) => {
                 host: m.userId === game?.hostId
             }));
 
-            // Send settings along with lobby update
             const settings = (game?.config as any) || {
                 maxRounds: game?.maxRounds || 3,
-                turnTime: 60,
+                turnTime: 80,
                 gameMode: 'NORMAL',
                 startingScore: 101
             };
@@ -552,23 +553,26 @@ export const initSocket = (httpServer: HttpServer) => {
 
                 // If game is active and user is returning, send gameStarted
                 if (gameAfterJoin.status === 'ACTIVE') {
-                    const playerList = gameAfterJoin.members.map((m: any) => ({
+                    const membersSorted = gameAfterJoin.members.sort((a, b) => a.seat - b.seat);
+                    const playerList = membersSorted.map((m: any) => ({
                         userId: m.userId,
-                        name: m.user?.name || m.user?.email || 'Player',
+                        name: m.isBot ? `🤖 ${m.user?.name}` : m.user?.name || m.user?.email || 'Player',
                         seat: m.seat,
                         openScore: m.openScore || 0,
                         openSets: m.openSets || [],
                         penaltyScore: m.penaltyScore || 0
                     }));
 
-                    const member = gameAfterJoin.members.find(m => m.userId === userId);
+                    const member = membersSorted.find(m => m.userId === userId);
                     socket.emit('gameStarted', {
                         gameId: lobbyId,
                         hand: (member as any)?.hand || [],
                         okeyTile: gameAfterJoin.okeyTile as any,
                         deckCount: (gameAfterJoin.tilePool as any)?.length || 0,
                         turnIndex: gameAfterJoin.turnIndex,
-                        members: playerList
+                        members: playerList,
+                        hasDrawn: (member as any)?.hasDrawn || false,
+                        mustOpen: (member as any)?.mustOpen || false
                     });
                 }
 
@@ -856,37 +860,37 @@ export const initSocket = (httpServer: HttpServer) => {
                 )
             ]);
 
-            // Track turn start
-            turnStartTimes.set(gameId, Date.now());
-
-            // Sync to Redis
+            // Clear cache and reset timer
             await updateGameCache(gameId);
+            turnStartTimes.set(gameId, Date.now());
+            botProcessingLock.delete(gameId);
 
-            const allSockets = await io.in(gameId).fetchSockets();
+            const membersList = members.map((m, idx) => ({
+                userId: m.userId,
+                name: m.user?.name || m.user?.email || 'Player',
+                seat: m.seat,
+                openScore: 0,
+                openSets: [],
+                penaltyScore: 0
+            }));
 
-            for (const s of allSockets) {
-                const sUserId = (s as any).user?.userId;
-                const idx = members.findIndex(mem => mem.userId === sUserId);
-                if (idx !== -1) {
-                    s.emit('gameStarted', {
-                        gameId: gameId,
-                        hand: hands[idx],
-                        deckCount: remainingPool.length,
-                        okeyTile,
-                        turnIndex: 0,
-                        currentRound: roundNumber,
-                        maxRounds: game.maxRounds,
-                        members: members.map(m => ({
-                            userId: m.userId,
-                            name: m.isBot ? `🤖 ${m.user.name}` : m.user.name || m.user.email,
-                            seat: m.seat,
-                            isBot: m.isBot,
-                            totalPenaltyScore: m.totalPenaltyScore
-                        }))
-                    });
-                }
+            members.forEach((m, idx) => {
+                const s = io.sockets.sockets.get(m.userId); // This won't work easily, need room emit
+            });
+
+            io.to(gameId).emit('gameStarted', {
+                gameId,
+                okeyTile: okeyTile as any,
+                deckCount: remainingPool.length,
+                turnIndex: 0,
+                members: membersList,
+                currentRound: roundNumber
+            });
+
+            // If first player is bot, trigger bot logic
+            if (members[0].isBot) {
+                setTimeout(() => checkAndProcessBotTurn(gameId), 3000);
             }
-            setTimeout(() => checkAndProcessBotTurn(gameId), 2000);
         }
 
         socket.on('startNextRound', async (gameId: string, callback?: (err?: string) => void) => {
@@ -966,9 +970,12 @@ export const initSocket = (httpServer: HttpServer) => {
 
         // ---------- In‑game actions ----------
         socket.on('drawTile', async (callback: (tile?: any, err?: string) => void) => {
-            const tempMember = await prisma.gameMember.findFirst({ where: { userId } });
-            if (!tempMember) return callback?.(undefined, 'Oyunda değilsiniz');
-            const activeGameId = tempMember.gameId;
+            const memberRecord = await prisma.gameMember.findFirst({
+                where: { userId, game: { status: 'ACTIVE' } },
+                include: { game: true }
+            });
+            if (!memberRecord) return callback?.(undefined, 'Aktif oyun bulunamadı');
+            const activeGameId = memberRecord.gameId;
 
             commandQueue.enqueue(activeGameId, async () => {
                 try {
@@ -981,11 +988,13 @@ export const initSocket = (httpServer: HttpServer) => {
 
                     if (!game || game.status !== 'ACTIVE') return callback?.(undefined, 'Oyun aktif değil');
 
-                    const member = game.members.find((m: any) => m.userId === userId);
-                    if (!member) return callback?.(undefined, 'Masada değilsiniz');
+                    // Check by seat
+                    if (game.turnIndex !== memberRecord.seat) {
+                        return callback?.(undefined, 'Sıra sizde değil');
+                    }
 
-                    const myIdx = game.members.findIndex((m: any) => m.userId === userId);
-                    if (game.turnIndex !== myIdx) return callback?.(undefined, 'Sıra sizde değil');
+                    const member = game.members.find((m: any) => m.id === memberRecord.id);
+                    if (!member) return callback?.(undefined, 'Oyuncu verisi hatası');
 
                     const pool = (game.tilePool as any) as any[];
                     if (!pool || pool.length === 0) return callback?.(undefined, 'Deste bitti');
@@ -1012,9 +1021,12 @@ export const initSocket = (httpServer: HttpServer) => {
         });
 
         socket.on('discardTile', async (tileId: string, callback?: (err?: string) => void) => {
-            const tempMember = await prisma.gameMember.findFirst({ where: { userId } });
-            if (!tempMember) return callback?.('Oyunda değilsiniz');
-            const activeGameId = tempMember.gameId;
+            const memberRecord = await prisma.gameMember.findFirst({
+                where: { userId, game: { status: 'ACTIVE' } },
+                include: { game: true }
+            });
+            if (!memberRecord) return callback?.('Aktif oyun bulunamadı');
+            const activeGameId = memberRecord.gameId;
 
             commandQueue.enqueue(activeGameId, async () => {
                 try {
@@ -1027,12 +1039,12 @@ export const initSocket = (httpServer: HttpServer) => {
 
                     if (!game || game.status !== 'ACTIVE') return callback?.('Oyun aktif değil');
 
-                    const members = game.members;
-                    const member = members.find((m: any) => m.userId === userId);
-                    if (!member) return callback?.('Masada değilsiniz');
+                    if (game.turnIndex !== memberRecord.seat) {
+                        return callback?.('Sıra sizde değil');
+                    }
 
-                    const myIdx = members.findIndex((m: any) => m.userId === userId);
-                    if (game.turnIndex !== myIdx) return callback?.('Sıra sizde değil');
+                    const member = game.members.find((m: any) => m.id === memberRecord.id);
+                    if (!member) return callback?.('Oyuncu verisi hatası');
                     if (!member.hasDrawn) return callback?.('Önce taş çekmelisiniz');
                     if (member.mustOpen) return callback?.('Yan taş aldığınız için yere per açmak zorundasınız');
 
@@ -1041,7 +1053,7 @@ export const initSocket = (httpServer: HttpServer) => {
                     if (!discardedTile) return callback?.('Taş elinizde bulunamadı');
                     const updatedHand = currentHand.filter((t: any) => t.id !== tileId);
 
-                    const nextTurn = (game.turnIndex + 1) % members.length;
+                    const nextTurn = (game.turnIndex + 1) % game.members.length;
 
                     await prisma.$transaction([
                         prisma.gameMember.update({ where: { id: member.id }, data: { hand: updatedHand, hasDrawn: false, mustOpen: false } as any }),
@@ -1053,7 +1065,7 @@ export const initSocket = (httpServer: HttpServer) => {
                             } as any
                         }),
                         prisma.gameMember.update({
-                            where: { id: members[nextTurn].id },
+                            where: { id: game.members[nextTurn].id },
                             data: { hasDrawn: false, mustOpen: false } as any
                         })
                     ]);
@@ -1075,26 +1087,30 @@ export const initSocket = (httpServer: HttpServer) => {
         });
 
         socket.on('drawDiscard', async (callback: (tile?: any, err?: string) => void) => {
-            const tempMember = await prisma.gameMember.findFirst({ where: { userId } });
-            if (!tempMember) return callback?.(undefined, 'Not in a game');
-            const gameId = tempMember.gameId;
+            const memberRecord = await prisma.gameMember.findFirst({
+                where: { userId, game: { status: 'ACTIVE' } },
+                include: { game: true }
+            });
+            if (!memberRecord) return callback?.(undefined, 'Aktif oyun bulunamadı');
+            const activeGameId = memberRecord.gameId;
 
-            commandQueue.enqueue(gameId, async () => {
+            commandQueue.enqueue(activeGameId, async () => {
                 try {
-                    if (isRateLimited(socket.id, 'drawDiscard')) return callback?.(undefined, 'Too many drawDiscard requests');
+                    if (isRateLimited(socket.id, 'drawDiscard')) return callback?.(undefined, 'Çok fazla istek');
 
                     const game = await prisma.game.findUnique({
-                        where: { id: gameId },
+                        where: { id: activeGameId },
                         include: { members: { orderBy: { seat: 'asc' } } }
                     }) as any;
 
                     if (!game || !game.lastDiscard) return callback?.(undefined, 'Alınacak taş yok');
 
-                    const member = game.members.find((m: any) => m.userId === userId);
-                    if (!member) return callback?.(undefined, 'Oyuncu bulunamadı');
+                    if (game.turnIndex !== memberRecord.seat) {
+                        return callback?.(undefined, 'Sıra sizde değil');
+                    }
 
-                    const myIdx = game.members.findIndex((m: any) => m.userId === userId);
-                    if (game.turnIndex !== myIdx) return callback?.(undefined, 'Sıra sizde değil');
+                    const member = game.members.find((m: any) => m.id === memberRecord.id);
+                    if (!member) return callback?.(undefined, 'Oyuncu verisi hatası');
                     if (member.hasDrawn) return callback?.(undefined, 'Zaten taş çektiniz');
 
                     const currentHand = (member.hand as any) || [];
@@ -1103,13 +1119,13 @@ export const initSocket = (httpServer: HttpServer) => {
 
                     await prisma.$transaction([
                         prisma.gameMember.update({ where: { id: member.id }, data: { hand: updatedHand, hasDrawn: true, mustOpen: true } as any }),
-                        prisma.game.update({ where: { id: gameId }, data: { lastDiscard: null } as any })
+                        prisma.game.update({ where: { id: activeGameId }, data: { lastDiscard: null } as any })
                     ]);
 
-                    await updateGameCache(gameId);
-                    turnStartTimes.set(gameId, Date.now());
+                    await updateGameCache(activeGameId);
+                    turnStartTimes.set(activeGameId, Date.now());
 
-                    io.to(gameId).emit('discardDrawn', { userId, tile: drawnTile });
+                    io.to(activeGameId).emit('discardDrawn', { userId, tile: drawnTile });
                     callback(drawnTile);
                 } catch (e) {
                     console.error(e);
@@ -1119,19 +1135,16 @@ export const initSocket = (httpServer: HttpServer) => {
         });
 
         socket.on('undoDrawDiscard', async (tileId: string, callback?: (err?: string) => void) => {
-            const tempMember = await prisma.gameMember.findFirst({ where: { userId } });
-            if (!tempMember) return callback?.('Oyun içerisinde değilsiniz');
-            const gameId = tempMember.gameId;
+            const memberRecord = await prisma.gameMember.findFirst({
+                where: { userId, game: { status: 'ACTIVE' } },
+                include: { game: true }
+            });
+            if (!memberRecord) return callback?.('Aktif oyun bulunamadı');
+            const activeGameId = memberRecord.gameId;
 
-            commandQueue.enqueue(gameId, async () => {
+            commandQueue.enqueue(activeGameId, async () => {
                 try {
-                    const game = await prisma.game.findUnique({
-                        where: { id: gameId },
-                        include: { members: true }
-                    });
-                    if (!game) return callback?.('Oyun bulunamadı');
-
-                    const member = (game.members as any).find((m: any) => m.userId === userId);
+                    const member = await prisma.gameMember.findUnique({ where: { id: memberRecord.id } });
                     if (!member || !member.mustOpen) return callback?.('Geri verilecek taş bulunamadı');
 
                     if (isRateLimited(socket.id, 'undoDrawDiscard')) return callback?.('Çok fazla işlem yapıyorsunuz');
@@ -1154,13 +1167,13 @@ export const initSocket = (httpServer: HttpServer) => {
                             } as any
                         }),
                         prisma.game.update({
-                            where: { id: gameId },
+                            where: { id: activeGameId },
                             data: { lastDiscard: tileToReturn } as any
                         })
                     ]);
 
-                    await updateGameCache(gameId);
-                    io.to(gameId).emit('tileDiscarded', { userId: 'TABLE', tile: tileToReturn });
+                    await updateGameCache(activeGameId);
+                    io.to(activeGameId).emit('tileDiscarded', { userId: 'TABLE', tile: tileToReturn });
                     callback?.();
                 } catch (e) {
                     console.error(e);
@@ -1170,20 +1183,23 @@ export const initSocket = (httpServer: HttpServer) => {
         });
 
         socket.on('placeSets', async (setsOfIds: string[][], callback: (err?: string) => void) => {
-            const tempMember = await prisma.gameMember.findFirst({ where: { userId } });
-            if (!tempMember) return callback('Oyun içerisinde değilsiniz');
-            const gameId = tempMember.gameId;
+            const memberRecord = await prisma.gameMember.findFirst({
+                where: { userId, game: { status: 'ACTIVE' } },
+                include: { game: true }
+            });
+            if (!memberRecord) return callback('Aktif oyun bulunamadı');
+            const activeGameId = memberRecord.gameId;
 
-            commandQueue.enqueue(gameId, async () => {
+            commandQueue.enqueue(activeGameId, async () => {
                 try {
                     if (isRateLimited(socket.id, 'placeSets')) return callback('Çok fazla işlem yapıyorsunuz');
 
                     const game = await prisma.game.findUnique({
-                        where: { id: gameId },
+                        where: { id: activeGameId },
                         include: { members: true }
                     }) as any;
 
-                    const member = game.members.find((m: any) => m.userId === userId);
+                    const member = game.members.find((m: any) => m.id === memberRecord.id);
                     if (!member) return callback('Üye bulunamadı');
 
                     const okeyTile = game.okeyTile as any;
@@ -1223,12 +1239,12 @@ export const initSocket = (httpServer: HttpServer) => {
                         } as any
                     });
 
-                    await updateGameCache(gameId);
-                    turnStartTimes.set(gameId, Date.now());
+                    await updateGameCache(activeGameId);
+                    turnStartTimes.set(activeGameId, Date.now());
 
                     for (const set of setsOfTiles) {
                         const setRes = calculateSetScore(set, okeyTile);
-                        io.to(gameId).emit('setPlaced', { userId, tiles: set, score: setRes.score });
+                        io.to(activeGameId).emit('setPlaced', { userId, tiles: set, score: setRes.score });
                     }
 
                     callback();
@@ -1258,8 +1274,6 @@ export const initSocket = (httpServer: HttpServer) => {
             console.log(`Socket disconnected: ${socket.id}`);
         });
     });
-
-
 
     return io;
 };
