@@ -359,8 +359,10 @@ export const initSocket = (httpServer: HttpServer) => {
                 const startTime = turnStartTimes.get(game.id);
                 if (startTime) {
                     const elapsed = Date.now() - startTime;
-                    // Increase timeout to 80s for better user experience
-                    if (elapsed > 80000) {
+                    const config = (game.config as any) || {};
+                    const turnTimeout = (config.turnTime || 80) * 1000;
+
+                    if (elapsed > turnTimeout) {
                         console.log(`[Supervisor] Timeout for game ${game.id}. Forcing move.`);
                         forceAutoMove(game.id).catch(e => console.error(e));
                     } else {
@@ -435,7 +437,16 @@ export const initSocket = (httpServer: HttpServer) => {
                 seat: m.seat,
                 host: m.userId === game?.hostId
             }));
-            io.to(lobbyId).emit('lobbyUpdate', memberList);
+
+            // Send settings along with lobby update
+            const settings = (game?.config as any) || {
+                maxRounds: game?.maxRounds || 3,
+                turnTime: 60,
+                gameMode: 'NORMAL',
+                startingScore: 101
+            };
+
+            io.to(lobbyId).emit('lobbyUpdate', { members: memberList, settings });
         };
 
         // Join a lobby (room) – lobbyId is the Game.id (pending game)
@@ -722,12 +733,13 @@ export const initSocket = (httpServer: HttpServer) => {
         socket.on('startGame', async (lobbyId: string, options: any, callback?: (err?: string) => void) => {
             try {
                 const actualCallback = typeof options === 'function' ? options : callback;
-                const opts = typeof options === 'object' ? options : {};
-                const maxRounds = opts.maxRounds || 3;
 
                 const game = await prisma.game.findUnique({ where: { id: lobbyId } });
                 if (!game) return actualCallback?.('Masa bulunamadı');
                 if (game.hostId !== userId) return actualCallback?.('Sadece masa sahibi başlatabilir');
+
+                const opts = (game.config as any) || {};
+                const maxRounds = opts.maxRounds || game.maxRounds || 3;
 
                 const members = await prisma.gameMember.findMany({
                     where: { gameId: lobbyId },
@@ -773,6 +785,27 @@ export const initSocket = (httpServer: HttpServer) => {
                 console.error(e);
                 const actualCallback = typeof options === 'function' ? options : callback;
                 actualCallback?.('Server error');
+            }
+        });
+
+        socket.on('updateSettings', async (data: { lobbyId: string, settings: any }, callback?: (err?: string) => void) => {
+            try {
+                const game = await prisma.game.findUnique({ where: { id: data.lobbyId } });
+                if (!game || game.hostId !== userId) return callback?.('Unauthorized');
+
+                await prisma.game.update({
+                    where: { id: data.lobbyId },
+                    data: {
+                        config: data.settings,
+                        maxRounds: data.settings.maxRounds || 3
+                    }
+                });
+
+                await emitLobbyUpdate(data.lobbyId);
+                callback?.();
+            } catch (e) {
+                console.error(e);
+                callback?.('Error updating settings');
             }
         });
 
