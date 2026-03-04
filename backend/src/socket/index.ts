@@ -338,7 +338,8 @@ export const initSocket = (httpServer: HttpServer) => {
                 botProcessingLock.delete(gameId);
                 const nextMember = game.members[nextTurn];
                 if (nextMember && nextMember.isBot) {
-                    setTimeout(() => checkAndProcessBotTurn(gameId), 5000 + Math.random() * 4000);
+                    // Consistent 3-5s for bot->bot
+                    setTimeout(() => checkAndProcessBotTurn(gameId), 3000 + Math.random() * 2000);
                 }
                 await updateGameCache(gameId);
             } catch (e) {
@@ -358,11 +359,15 @@ export const initSocket = (httpServer: HttpServer) => {
                 const startTime = turnStartTimes.get(game.id);
                 if (startTime) {
                     const elapsed = Date.now() - startTime;
-                    if (elapsed > 60000) {
+                    // Increase timeout to 80s for better user experience
+                    if (elapsed > 80000) {
+                        console.log(`[Supervisor] Timeout for game ${game.id}. Forcing move.`);
                         forceAutoMove(game.id).catch(e => console.error(e));
                     } else {
                         const currentMember = game.members[game.turnIndex];
+                        // If bot is stuck for more than 15s, poke it
                         if (currentMember && currentMember.isBot && elapsed > 15000) {
+                            console.log(`[Supervisor] Bot boost for game ${game.id}`);
                             checkAndProcessBotTurn(game.id).catch(e => console.error(e));
                         }
                     }
@@ -963,6 +968,10 @@ export const initSocket = (httpServer: HttpServer) => {
                     await updateGameCache(activeGameId);
 
                     io.to(activeGameId).emit('poolUpdate', { deckCount: pool.length });
+
+                    // IMPORTANT: Reset turn timer on draw so player has time to think/place sets
+                    turnStartTimes.set(activeGameId, Date.now());
+
                     callback(drawnTile);
                 } catch (e) {
                     console.error(e);
@@ -1025,8 +1034,8 @@ export const initSocket = (httpServer: HttpServer) => {
                     // Track turn start
                     turnStartTimes.set(activeGameId, Date.now());
 
-                    // If next player is bot, trigger delay
-                    setTimeout(() => checkAndProcessBotTurn(activeGameId), 1500 + Math.random() * 1500);
+                    // If next player is bot, trigger delay (consistent 2-4s for human->bot)
+                    setTimeout(() => checkAndProcessBotTurn(activeGameId), 2000 + Math.random() * 2000);
 
                     // Update Redis cache
                     await updateGameCache(activeGameId);
@@ -1072,6 +1081,9 @@ export const initSocket = (httpServer: HttpServer) => {
 
                     // Update Redis cache
                     await updateGameCache(gameId);
+
+                    // IMPORTANT: Reset turn timer on draw
+                    turnStartTimes.set(gameId, Date.now());
 
                     io.to(gameId).emit('discardDrawn', { userId, tile: drawnTile });
                     callback(drawnTile);
@@ -1189,6 +1201,10 @@ export const initSocket = (httpServer: HttpServer) => {
 
                     // Update Redis cache
                     await updateGameCache(gameId);
+
+                    // IMPORTANT: Reset turn timer on every successful set placement 
+                    // to give the player more time for complex moves.
+                    turnStartTimes.set(gameId, Date.now());
 
                     // Emit event for each set placed or one big event
                     for (const set of setsOfTiles) {
