@@ -8,6 +8,7 @@ import { Tile } from '../game/rules';
 
 const prisma = new PrismaClient();
 const botProcessingLock = new Map<string, boolean>();
+const gameFinishLock = new Map<string, boolean>(); // New lock map
 const turnStartTimes = new Map<string, number>(); // track when each game's turn started
 
 /**
@@ -1041,12 +1042,18 @@ export const initSocket = (httpServer: HttpServer) => {
     }
 
     async function handleGameFinish(gameId: string, reason: string) {
+        if (gameFinishLock.get(gameId)) return;
+        gameFinishLock.set(gameId, true);
+
         try {
             const game = await prisma.game.findUnique({
                 where: { id: gameId },
                 include: { members: true }
             });
-            if (!game || game.status === 'FINISHED') return;
+            if (!game || game.status === 'FINISHED' || game.status === 'PENDING') {
+                gameFinishLock.delete(gameId);
+                return;
+            }
 
             const isFinalRound = game.currentRound >= game.maxRounds;
             const okeyTile = game.okeyTile as any;
@@ -1069,9 +1076,11 @@ export const initSocket = (httpServer: HttpServer) => {
             await prisma.$transaction([
                 prisma.game.update({
                     where: { id: gameId },
+                    // During results, we set status to PENDING or stay as is but mark as finished
+                    // Actually, let's keep it as is but set finishedAt or something
                     data: {
-                        status: isFinalRound ? 'FINISHED' : 'ACTIVE',
-                        finishedAt: isFinalRound ? new Date() : null
+                        status: isFinalRound ? 'FINISHED' : 'PENDING', // Set to PENDING to stop bot actions
+                        finishedAt: new Date()
                     }
                 }),
                 ...updates
@@ -1099,6 +1108,9 @@ export const initSocket = (httpServer: HttpServer) => {
 
         } catch (e) {
             console.error('Error in handleGameFinish:', e);
+        } finally {
+            // We delay unlocking to avoid race conditions during the emission
+            setTimeout(() => gameFinishLock.delete(gameId), 2000);
         }
     }
 
