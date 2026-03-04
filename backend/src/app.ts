@@ -11,24 +11,14 @@ dotenv.config();
 
 const app = express();
 
-const allowedOrigins = [
-    'http://localhost:5173',
-    'http://localhost:3000',
-    'https://frontend-hakancinelis-projects.vercel.app',
-    process.env.FRONTEND_URL,
-].filter(Boolean) as string[];
-
 app.use(cors({
-    origin: (origin, callback) => {
-        // allow no-origin requests (mobile/curl) and whitelisted origins
-        if (!origin || allowedOrigins.some(o => origin.startsWith(o))) {
-            callback(null, true);
-        } else {
-            callback(new Error(`CORS blocked: ${origin}`));
-        }
-    },
+    origin: '*',
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+app.options('*', cors());
 
 app.use(express.json());
 
