@@ -791,6 +791,10 @@ export const initSocket = (httpServer: HttpServer) => {
                 }
 
                 await prisma.$transaction([
+                    prisma.game.updateMany({
+                        where: { hostId: userId, status: 'ACTIVE', id: { not: lobbyId } },
+                        data: { status: 'FINISHED' }
+                    }),
                     prisma.game.update({
                         where: { id: lobbyId },
                         data: { maxRounds }
@@ -960,7 +964,7 @@ export const initSocket = (httpServer: HttpServer) => {
                 if (!game) {
                     game = await prisma.game.findUnique({
                         where: { id: gameId },
-                        include: { members: { include: { user: true } } }
+                        include: { members: { include: { user: true }, orderBy: { seat: 'asc' } } }
                     });
                     if (game) {
                         // Attempt to update cache (will be caught by try-catch in updateGameCache)
@@ -974,6 +978,7 @@ export const initSocket = (httpServer: HttpServer) => {
                 if (!member) return callback?.('Not a member of this game');
 
                 socket.join(gameId);
+                (socket as any).activeGameId = gameId;
 
                 const playerList = game.members.map((m: any) => ({
                     userId: m.userId,
@@ -1006,12 +1011,14 @@ export const initSocket = (httpServer: HttpServer) => {
 
         // ---------- In‑game actions ----------
         socket.on('drawTile', async (callback: (tile?: any, err?: string) => void) => {
+            const activeGameId = (socket as any).activeGameId;
+            if (!activeGameId) return callback?.(undefined, 'Lütfen önce oyuna katılın');
+
             const memberRecord = await prisma.gameMember.findFirst({
-                where: { userId, game: { status: 'ACTIVE' } },
+                where: { userId, gameId: activeGameId, game: { status: 'ACTIVE' } },
                 include: { game: true }
             });
             if (!memberRecord) return callback?.(undefined, 'Aktif oyun bulunamadı');
-            const activeGameId = memberRecord.gameId;
 
             commandQueue.enqueue(activeGameId, async () => {
                 try {
@@ -1029,6 +1036,7 @@ export const initSocket = (httpServer: HttpServer) => {
 
                     // Turn validation by seat
                     if (game.turnIndex !== member.seat) {
+                        console.log(`[TurnMismatch] drawTile: gameId=${activeGameId}, user=${userId}, turn=${game.turnIndex}, seat=${member.seat}`);
                         return callback?.(undefined, 'Sıra sizde değil');
                     }
 
@@ -1057,12 +1065,14 @@ export const initSocket = (httpServer: HttpServer) => {
         });
 
         socket.on('discardTile', async (tileId: string, callback?: (err?: string) => void) => {
+            const activeGameId = (socket as any).activeGameId;
+            if (!activeGameId) return callback?.('Lütfen önce oyuna katılın');
+
             const memberRecord = await prisma.gameMember.findFirst({
-                where: { userId, game: { status: 'ACTIVE' } },
+                where: { userId, gameId: activeGameId, game: { status: 'ACTIVE' } },
                 include: { game: true }
             });
             if (!memberRecord) return callback?.('Aktif oyun bulunamadı');
-            const activeGameId = memberRecord.gameId;
 
             commandQueue.enqueue(activeGameId, async () => {
                 try {
@@ -1079,6 +1089,7 @@ export const initSocket = (httpServer: HttpServer) => {
                     if (!member) return callback?.('Oyuncu verisi hatası');
 
                     if (game.turnIndex !== member.seat) {
+                        console.log(`[TurnMismatch] discardTile: gameId=${activeGameId}, user=${userId}, turn=${game.turnIndex}, seat=${member.seat}`);
                         return callback?.('Sıra sizde değil');
                     }
 
@@ -1127,12 +1138,14 @@ export const initSocket = (httpServer: HttpServer) => {
         });
 
         socket.on('drawDiscard', async (callback: (tile?: any, err?: string) => void) => {
+            const activeGameId = (socket as any).activeGameId;
+            if (!activeGameId) return callback?.(undefined, 'Lütfen önce oyuna katılın');
+
             const memberRecord = await prisma.gameMember.findFirst({
-                where: { userId, game: { status: 'ACTIVE' } },
+                where: { userId, gameId: activeGameId, game: { status: 'ACTIVE' } },
                 include: { game: true }
             });
             if (!memberRecord) return callback?.(undefined, 'Aktif oyun bulunamadı');
-            const activeGameId = memberRecord.gameId;
 
             commandQueue.enqueue(activeGameId, async () => {
                 try {
@@ -1176,12 +1189,14 @@ export const initSocket = (httpServer: HttpServer) => {
         });
 
         socket.on('undoDrawDiscard', async (tileId: string, callback?: (err?: string) => void) => {
+            const activeGameId = (socket as any).activeGameId;
+            if (!activeGameId) return callback?.('Lütfen önce oyuna katılın');
+
             const memberRecord = await prisma.gameMember.findFirst({
-                where: { userId, game: { status: 'ACTIVE' } },
+                where: { userId, gameId: activeGameId, game: { status: 'ACTIVE' } },
                 include: { game: true }
             });
             if (!memberRecord) return callback?.('Aktif oyun bulunamadı');
-            const activeGameId = memberRecord.gameId;
 
             commandQueue.enqueue(activeGameId, async () => {
                 try {
@@ -1224,12 +1239,14 @@ export const initSocket = (httpServer: HttpServer) => {
         });
 
         socket.on('placeSets', async (setsOfIds: string[][], callback: (err?: string) => void) => {
+            const activeGameId = (socket as any).activeGameId;
+            if (!activeGameId) return callback('Lütfen önce oyuna katılın');
+
             const memberRecord = await prisma.gameMember.findFirst({
-                where: { userId, game: { status: 'ACTIVE' } },
+                where: { userId, gameId: activeGameId, game: { status: 'ACTIVE' } },
                 include: { game: true }
             });
             if (!memberRecord) return callback('Aktif oyun bulunamadı');
-            const activeGameId = memberRecord.gameId;
 
             commandQueue.enqueue(activeGameId, async () => {
                 try {
