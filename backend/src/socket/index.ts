@@ -142,10 +142,17 @@ export const initSocket = (httpServer: HttpServer) => {
                         const botToReplace = currentMembers.find(m => m.isBot);
                         if (botToReplace) {
                             console.log(`Replacing bot ${botToReplace.userId} for user ${userId} in lobby ${lobbyId}`);
+                            const botHand = botToReplace.hand;
                             await prisma.gameMember.delete({ where: { id: botToReplace.id } });
 
                             await prisma.gameMember.create({
-                                data: { gameId: lobbyId, userId, seat: botToReplace.seat, isReady: false }
+                                data: {
+                                    gameId: lobbyId,
+                                    userId,
+                                    seat: botToReplace.seat,
+                                    isReady: false,
+                                    hand: botHand as any
+                                }
                             });
                         } else {
                             return callback?.('Masa dolu');
@@ -173,8 +180,8 @@ export const initSocket = (httpServer: HttpServer) => {
                 if (!gameAfterJoin) return callback?.('Lobby state error');
 
                 // If game is active and user is returning, send gameStarted
-                if (game.status === 'ACTIVE') {
-                    const playerList = game.members.map((m: any) => ({
+                if (gameAfterJoin.status === 'ACTIVE') {
+                    const playerList = gameAfterJoin.members.map((m: any) => ({
                         userId: m.userId,
                         name: m.user?.name || m.user?.email || 'Player',
                         seat: m.seat,
@@ -183,13 +190,13 @@ export const initSocket = (httpServer: HttpServer) => {
                         penaltyScore: m.penaltyScore || 0
                     }));
 
-                    const member = game.members.find(m => m.userId === userId);
+                    const member = gameAfterJoin.members.find(m => m.userId === userId);
                     socket.emit('gameStarted', {
                         gameId: lobbyId,
                         hand: (member as any)?.hand || [],
-                        okeyTile: game.okeyTile as any,
-                        deckCount: (game.tilePool as any)?.length || 0,
-                        turnIndex: game.turnIndex,
+                        okeyTile: gameAfterJoin.okeyTile as any,
+                        deckCount: (gameAfterJoin.tilePool as any)?.length || 0,
+                        turnIndex: gameAfterJoin.turnIndex,
                         members: playerList
                     });
                 }

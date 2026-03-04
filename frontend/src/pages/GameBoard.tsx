@@ -137,16 +137,20 @@ const GameBoard: React.FC = () => {
         // Receive periodic game state or updates
         socket.on('gameState', (state: { hand: Tile[]; deckCount: number; okeyTile: Tile; turnIndex: number; members: Member[]; lastDiscard?: Tile }) => {
             if (state.hand) {
-                setHand(state.hand);
-                // Sync rack slots with provided hand
+                // IMPORTANT: Filter out tiles that are already in pending sets to avoid duplicates
+                const pendingIds = new Set(pendingSets.flat().map(t => t.id));
+                const filteredHand = state.hand.filter(t => !pendingIds.has(t.id));
+                setHand(filteredHand);
+
+                // Sync rack slots with filtered hand
                 setRackSlots(prev => {
                     const next = [...prev];
                     // Remove tiles no longer in hand
                     next.forEach((slot, i) => {
-                        if (slot && !state.hand.find(t => t.id === slot.id)) next[i] = null;
+                        if (slot && !filteredHand.find(t => t.id === slot.id)) next[i] = null;
                     });
-                    // Add new tiles to first empty slot
-                    state.hand.forEach(tile => {
+                    // Add new tiles
+                    filteredHand.forEach(tile => {
                         if (!next.find(s => s?.id === tile.id)) {
                             const emptyIdx = next.indexOf(null);
                             if (emptyIdx !== -1) next[emptyIdx] = tile;
@@ -1138,7 +1142,12 @@ const GameBoard: React.FC = () => {
                                 {set.map(t => renderTile(t))}
                                 <button
                                     onClick={() => {
-                                        setHand(prev => [...prev, ...set]);
+                                        setHand(prev => {
+                                            const newHand = [...prev, ...set];
+                                            // Remove duplicates if any, though ideally pending sets should not have duplicates with hand
+                                            const handIds = new Set(newHand.map(t => t.id));
+                                            return newHand.filter((t, i, a) => handIds.has(t.id) && a.findIndex(at => at.id === t.id) === i);
+                                        });
                                         setPendingSets(prev => prev.filter((_, i) => i !== idx));
                                     }}
                                     className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:scale-110"
@@ -1255,32 +1264,32 @@ const GameBoard: React.FC = () => {
                 </div>
 
                 {/* Right Side Buttons (Game Actions) */}
-                <div className="flex flex-col space-y-2 ml-4">
-                    <div className="flex flex-col space-y-1">
-                        <span className="text-[8px] font-black opacity-30 text-center uppercase tracking-widest leading-none">HAMLE</span>
-                        <div className="grid grid-cols-1 gap-1">
+                <div className="flex flex-col space-y-3 ml-4">
+                    <div className="flex flex-col space-y-1.5">
+                        <span className="text-[9px] font-black opacity-40 text-center uppercase tracking-widest leading-none mb-1">HAMLE</span>
+                        <div className="flex flex-col gap-2">
                             <button
                                 onClick={addGroup}
-                                className="w-12 h-12 btn-premium btn-green shadow-green-500/20 flex flex-col items-center justify-center group"
+                                className="w-14 h-14 btn-premium btn-green shadow-green-500/20 flex flex-col items-center justify-center group border-2 border-green-400/30"
                             >
-                                <span className="text-lg group-hover:scale-110 transition-transform">📦</span>
-                                <span className="text-[7px] font-black uppercase mt-0.5 leading-tight">{t('addGroup')}</span>
+                                <span className="text-2xl group-hover:scale-110 transition-transform">📦</span>
+                                <span className="text-[9px] font-black uppercase mt-1 leading-tight">{t('addGroup')}</span>
                             </button>
                             <button
                                 onClick={async () => {
                                     if (pendingSets.length === 0) return alert(t('noSetsToOpen'));
                                     await placeSets(pendingSets);
                                 }}
-                                className="w-12 h-12 btn-premium btn-amber shadow-amber-500/20 flex flex-col items-center justify-center group"
+                                className="w-14 h-14 btn-premium btn-amber shadow-amber-500/20 flex flex-col items-center justify-center group border-2 border-amber-400/30"
                             >
-                                <span className="text-lg group-hover:scale-110 transition-transform">📤</span>
-                                <span className="text-[7px] font-black uppercase mt-0.5 leading-tight">{t('placeOnTable')}</span>
+                                <span className="text-2xl group-hover:scale-110 transition-transform">📤</span>
+                                <span className="text-[9px] font-black uppercase mt-1 leading-tight">{t('placeOnTable')}</span>
                             </button>
                         </div>
                     </div>
 
-                    <div className="flex flex-col space-y-1">
-                        <span className="text-[8px] font-black opacity-30 text-center uppercase tracking-widest leading-none">BİTİR</span>
+                    <div className="flex flex-col space-y-1.5">
+                        <span className="text-[9px] font-black opacity-40 text-center uppercase tracking-widest leading-none mb-1">BİTİR</span>
                         <button
                             id="discard-zone"
                             onClick={async () => {
@@ -1289,10 +1298,10 @@ const GameBoard: React.FC = () => {
                                 await discardTile(tileId);
                                 setSelectedTileIds(new Set());
                             }}
-                            className="w-12 h-12 btn-premium btn-red shadow-red-500/40 flex flex-col items-center justify-center group uppercase"
+                            className="w-14 h-14 btn-premium btn-red shadow-red-500/40 flex flex-col items-center justify-center group border-2 border-red-400/30"
                         >
-                            <span className="text-lg group-hover:-translate-y-1 transition-transform">🗑️</span>
-                            <span className="font-black text-[8px] mt-0.5">{t('discardAction')}</span>
+                            <span className="text-2xl group-hover:-translate-y-1 transition-transform">🗑️</span>
+                            <span className="font-black text-[10px] mt-1 uppercase">{t('discardAction')}</span>
                         </button>
                     </div>
                 </div>
