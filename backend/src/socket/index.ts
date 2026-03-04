@@ -572,11 +572,19 @@ export const initSocket = (httpServer: HttpServer) => {
                 if (!member) return callback?.(undefined, 'Not in this game');
 
                 const myIdx = game.members.findIndex((m: any) => m.userId === userId);
-                if (game.turnIndex !== myIdx) return callback?.(undefined, 'Not your turn');
+                console.log(`[Game ${activeGameId}] User ${userId} (Index ${myIdx}) attempting to DRAW. Current Turn Index: ${game.turnIndex}`);
+
+                if (game.turnIndex !== myIdx) {
+                    console.log(`[Game ${activeGameId}] Draw rejected: Not user's turn.`);
+                    return callback?.(undefined, 'Not your turn');
+                }
 
                 const pool = (game.tilePool as any) as any[];
                 if (!pool || pool.length === 0) return callback?.(undefined, 'Deck empty');
-                if (member.hasDrawn) return callback?.(undefined, 'Already drawn');
+                if (member.hasDrawn) {
+                    console.log(`[Game ${activeGameId}] Draw rejected: User already drawn.`);
+                    return callback?.(undefined, 'Already drawn');
+                }
 
                 const drawnTile = pool.shift();
                 const updatedHand = [...((member.hand as any) || []), drawnTile];
@@ -612,7 +620,12 @@ export const initSocket = (httpServer: HttpServer) => {
                 const members = game.members;
                 const myIdx = members.findIndex((m: any) => m.userId === userId);
 
-                if (game.turnIndex !== myIdx) return callback?.('Sıra sizde değil');
+                console.log(`[Game ${activeGameId}] User ${userId} (Index ${myIdx}) attempting to DISCARD. Current Turn Index: ${game.turnIndex}`);
+
+                if (game.turnIndex !== myIdx) {
+                    console.log(`[Game ${activeGameId}] Discard rejected: Not user's turn.`);
+                    return callback?.('Sıra sizde değil');
+                }
                 if (!member.hasDrawn) return callback?.('Önce taş çekmelisiniz');
                 if (member.mustOpen) return callback?.('Yan taşı aldığınız için yere per açmak zorundasınız');
 
@@ -992,6 +1005,7 @@ export const initSocket = (httpServer: HttpServer) => {
             ]);
 
             // 3. Emit events
+            console.log(`[Game ${gameId}] Bot turn finished. New Turn Index: ${nextTurn} (was ${game.turnIndex})`);
             io.to(gameId).emit('poolUpdate', { deckCount: pool.length });
             io.to(gameId).emit('tileDiscarded', { userId: currentMember.userId, tile: discardedTile });
             io.to(gameId).emit('turnUpdate', { turnIndex: nextTurn });
