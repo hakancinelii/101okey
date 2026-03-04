@@ -951,7 +951,9 @@ export const initSocket = (httpServer: HttpServer) => {
                     okeyTile: game.okeyTile as any,
                     turnIndex: game.turnIndex,
                     lastDiscard: game.lastDiscard as any,
-                    members: playerList
+                    members: playerList,
+                    hasDrawn: member.hasDrawn,
+                    mustOpen: member.mustOpen
                 });
 
                 callback?.();
@@ -1082,13 +1084,12 @@ export const initSocket = (httpServer: HttpServer) => {
         });
 
         socket.on('drawDiscard', async (callback: (tile?: any, err?: string) => void) => {
-            const member = await prisma.gameMember.findFirst({ where: { userId }, include: { game: true } });
-            if (!member) return callback?.(undefined, 'Not in a game');
-            const gameId = member.gameId;
+            const tempMember = await prisma.gameMember.findFirst({ where: { userId } });
+            if (!tempMember) return callback?.(undefined, 'Not in a game');
+            const gameId = tempMember.gameId;
 
             commandQueue.enqueue(gameId, async () => {
                 try {
-                    // Rate limiting
                     if (isRateLimited(socket.id, 'drawDiscard')) return callback?.(undefined, 'Too many drawDiscard requests');
 
                     const game = await prisma.game.findUnique({
@@ -1096,12 +1097,14 @@ export const initSocket = (httpServer: HttpServer) => {
                         include: { members: { orderBy: { seat: 'asc' } } }
                     }) as any;
 
-                    if (!game.lastDiscard) return callback?.(undefined, 'No tile to draw');
+                    if (!game || !game.lastDiscard) return callback?.(undefined, 'Alınacak taş yok');
 
-                    const members = game.members;
-                    const myIdx = members.findIndex((m: any) => m.userId === userId);
-                    if (game.turnIndex !== myIdx) return callback?.(undefined, 'Not your turn');
-                    if ((member as any).hasDrawn) return callback?.(undefined, 'Already drawn a tile');
+                    const member = game.members.find((m: any) => m.userId === userId);
+                    if (!member) return callback?.(undefined, 'Oyuncu bulunamadı');
+
+                    const myIdx = game.members.findIndex((m: any) => m.userId === userId);
+                    if (game.turnIndex !== myIdx) return callback?.(undefined, 'Sıra sizde değil');
+                    if (member.hasDrawn) return callback?.(undefined, 'Zaten taş çektiniz');
 
                     const currentHand = (member.hand as any) || [];
                     const drawnTile = game.lastDiscard;
@@ -1112,40 +1115,42 @@ export const initSocket = (httpServer: HttpServer) => {
                         prisma.game.update({ where: { id: gameId }, data: { lastDiscard: null } as any })
                     ]);
 
-                    // Update Redis cache
                     await updateGameCache(gameId);
-
-                    // IMPORTANT: Reset turn timer on draw
                     turnStartTimes.set(gameId, Date.now());
 
                     io.to(gameId).emit('discardDrawn', { userId, tile: drawnTile });
                     callback(drawnTile);
                 } catch (e) {
                     console.error(e);
-                    callback?.(undefined, 'Server error');
+                    callback?.(undefined, 'Sunucu hatası');
                 }
             });
         });
 
         socket.on('undoDrawDiscard', async (tileId: string, callback?: (err?: string) => void) => {
-            const member = await prisma.gameMember.findFirst({
-                where: { userId },
-                include: { game: true }
-            });
-            if (!member || !member.mustOpen) return callback?.('Geri verilecek taş bulunamadı');
-            const gameId = member.gameId;
+            const tempMember = await prisma.gameMember.findFirst({ where: { userId } });
+            if (!tempMember) return callback?.('Oyun içerisinde değilsiniz');
+            const gameId = tempMember.gameId;
 
             commandQueue.enqueue(gameId, async () => {
                 try {
-                    // Rate limiting
-                    if (isRateLimited(socket.id, 'undoDrawDiscard')) return callback?.('Too many undo requests');
+                    const game = await prisma.game.findUnique({
+                        where: { id: gameId },
+                        include: { members: true }
+                    });
+                    if (!game) return callback?.('Oyun bulunamadı');
+
+                    const member = (game.members as any).find((m: any) => m.userId === userId);
+                    if (!member || !member.mustOpen) return callback?.('Geri verilecek taş bulunamadı');
+
+                    if (isRateLimited(socket.id, 'undoDrawDiscard')) return callback?.('Çok fazla işlem yapıyorsunuz');
 
                     const currentHand = (member.hand as any) || [];
                     const tileToReturn = currentHand.find((t: any) => t.id === tileId);
                     if (!tileToReturn) return callback?.('Taş listenizde bulunamadı');
 
                     const updatedHand = currentHand.filter((t: any) => t.id !== tileId);
-                    const newPenalty = ((member as any).penaltyScore || 0) + 101; // Penalty for undoing pick
+                    const newPenalty = (member.penaltyScore || 0) + 101;
 
                     await prisma.$transaction([
                         prisma.gameMember.update({
@@ -1163,12 +1168,8 @@ export const initSocket = (httpServer: HttpServer) => {
                         })
                     ]);
 
-                    // Update Redis cache
                     await updateGameCache(gameId);
-
-                    // Update everyone that the tile is back on the table
                     io.to(gameId).emit('tileDiscarded', { userId: 'TABLE', tile: tileToReturn });
-
                     callback?.();
                 } catch (e) {
                     console.error(e);
@@ -1178,29 +1179,28 @@ export const initSocket = (httpServer: HttpServer) => {
         });
 
         socket.on('placeSets', async (setsOfIds: string[][], callback: (err?: string) => void) => {
-            const member = await prisma.gameMember.findFirst({
-                where: { userId },
-                include: { game: true }
-            });
-            if (!member) return callback('Not in a game');
-            const gameId = member.gameId;
+            const tempMember = await prisma.gameMember.findFirst({ where: { userId } });
+            if (!tempMember) return callback('Oyun içerisinde değilsiniz');
+            const gameId = tempMember.gameId;
 
             commandQueue.enqueue(gameId, async () => {
                 try {
-                    // Rate limiting
-                    if (isRateLimited(socket.id, 'placeSets')) return callback('Too many placeSets requests');
+                    if (isRateLimited(socket.id, 'placeSets')) return callback('Çok fazla işlem yapıyorsunuz');
 
                     const game = await prisma.game.findUnique({
                         where: { id: gameId },
                         include: { members: true }
                     }) as any;
 
+                    const member = game.members.find((m: any) => m.userId === userId);
+                    if (!member) return callback('Üye bulunamadı');
+
                     const okeyTile = game.okeyTile as any;
                     const currentHand = (member.hand as any) || [];
 
                     const allTileIds = setsOfIds.flat();
                     const usedTiles = currentHand.filter((t: any) => allTileIds.includes(t.id));
-                    if (usedTiles.length !== allTileIds.length) return callback('Some tiles not in hand');
+                    if (usedTiles.length !== allTileIds.length) return callback('Bazı taşlar elinizde değil');
 
                     // Convert IDs back to Tile objects for validation
                     const setsOfTiles = setsOfIds.map(ids =>
@@ -1232,14 +1232,9 @@ export const initSocket = (httpServer: HttpServer) => {
                         } as any
                     });
 
-                    // Update Redis cache
                     await updateGameCache(gameId);
-
-                    // IMPORTANT: Reset turn timer on every successful set placement 
-                    // to give the player more time for complex moves.
                     turnStartTimes.set(gameId, Date.now());
 
-                    // Emit event for each set placed or one big event
                     for (const set of setsOfTiles) {
                         const setRes = calculateSetScore(set, okeyTile);
                         io.to(gameId).emit('setPlaced', { userId, tiles: set, score: setRes.score });
@@ -1248,7 +1243,7 @@ export const initSocket = (httpServer: HttpServer) => {
                     callback();
                 } catch (e) {
                     console.error(e);
-                    callback('Server error');
+                    callback('Sunucu hatası');
                 }
             });
         });

@@ -169,14 +169,20 @@ const GameBoard: React.FC = () => {
             if (state.members) setMembers(state.members);
             if (state.lastDiscard !== undefined) setLastDiscard(state.lastDiscard);
 
-            // Sync drawing state: if turn is mine and I have 15 tiles (or 16 if currently my turn), adjust hasDrawn
-            // 101 Okey: 21 tiles + 1 drawn = 22. Wait, the logic here mentions 22. 
-            // Standard 101: 21 tiles, one player starts with 22.
+            if (state.lastDiscard !== undefined) setLastDiscard(state.lastDiscard);
+
+            // Sync drawing and state flags from server if provided
+            if (state.hasDrawn !== undefined) setHasDrawn(state.hasDrawn);
+            if (state.mustOpen !== undefined) setMustOpen(state.mustOpen);
+
+            // Fallback sync drawing state: if turn is mine and I have 22 tiles, I must have drawn
             const myInfo = getUserInfo();
             if (state.turnIndex !== undefined && state.members) {
-                const myIdxInState = state.members.findIndex((m: any) => m.userId === myInfo.userId);
-                if (state.turnIndex === myIdxInState && state.hand && state.hand.length === 22) {
-                    setHasDrawn(true);
+                const myIdxInState = Array.isArray(state.members) ? state.members.findIndex((m: any) => m.userId === myInfo.userId) : -1;
+                if (state.turnIndex === myIdxInState && state.hasDrawn === undefined) {
+                    if (state.hand) {
+                        setHasDrawn(state.hand.length > 21);
+                    }
                 }
             }
         });
@@ -201,11 +207,14 @@ const GameBoard: React.FC = () => {
             if (data.currentRound) setCurrentRound(data.currentRound);
             if (data.maxRounds) setMaxRounds(data.maxRounds);
 
-            // Sync drawing state for new game started
+            // Sync state flags if provided
+            if ((data as any).hasDrawn !== undefined) setHasDrawn((data as any).hasDrawn);
+            if ((data as any).mustOpen !== undefined) setMustOpen((data as any).mustOpen);
+
             const myInfo = getUserInfo();
-            const myIdxInData = data.members?.findIndex((m: any) => m.userId === myInfo.userId);
-            if (data.turnIndex === myIdxInData && data.hand && data.hand.length === 22) {
-                setHasDrawn(true);
+            const myIdxInData = Array.isArray(data.members) ? data.members.findIndex((m: any) => m.userId === myInfo.userId) : -1;
+            if (data.turnIndex === myIdxInData && (data as any).hasDrawn === undefined) {
+                if (data.hand) setHasDrawn(data.hand.length > 21);
             }
         });
 
@@ -680,7 +689,7 @@ const GameBoard: React.FC = () => {
     };
 
     const myId = getUserInfo().userId;
-    const myIndex = members.findIndex(m => m.userId === myId);
+    const myIndex = Array.isArray(members) ? members.findIndex(m => m.userId === myId) : -1;
 
     const getPlayerByRelativePos = (pos: number) => {
         if (members.length === 0) return null;
@@ -1020,7 +1029,7 @@ const GameBoard: React.FC = () => {
                             return (
                                 <div
                                     key={idx}
-                                    title={`${members.find(m => m.userId === entry.userId)?.name || '?'} attı`}
+                                    title={`${Array.isArray(members) ? members.find(m => m.userId === entry.userId)?.name || '?' : '?'} attı`}
                                     style={{
                                         position: 'absolute',
                                         top: '50%', left: '50%',
