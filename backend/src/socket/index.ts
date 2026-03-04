@@ -15,28 +15,35 @@ const turnStartTimes = new Map<string, number>(); // track when each game's turn
  * Attach to an existing HTTP server (Express app).
  */
 export const initSocket = (httpServer: HttpServer) => {
-    const allowedOrigins = [
-        'http://localhost:5173',
-        'http://localhost:3000',
-        'https://frontend-hakancinelis-projects.vercel.app',
-        process.env.FRONTEND_URL,
-    ].filter(Boolean) as string[];
-
     const io = new SocketIOServer(httpServer, {
-        cors: { origin: allowedOrigins, methods: ['GET', 'POST'], credentials: true },
+        cors: { origin: '*', methods: ['GET', 'POST'], credentials: true },
     });
 
     // Middleware to verify JWT on each socket connection
     io.use(async (socket: Socket, next) => {
         const token = socket.handshake.auth?.token;
-        if (!token) return next(new Error('Missing token'));
+        console.log(`Socket auth attempt with token: ${token?.substring(0, 10)}...`);
+
+        if (!token) {
+            console.log('Socket connectivity: Missing token');
+            return next(new Error('Missing token'));
+        }
+
         try {
-            // Re‑use verifyToken logic – it attaches user to request, we mimic it here
-            const payload = (await import('jsonwebtoken')).verify(token, process.env.JWT_SECRET!);
-            // @ts-ignore – we add a custom field
-            (socket as any).user = payload;
+            const secret = process.env.JWT_SECRET;
+            if (!secret) {
+                console.error('JWT_SECRET is UNDEFINED in socket middleware!');
+                return next(new Error('Server configuration error'));
+            }
+
+            const jwt = await import('jsonwebtoken');
+            const payload = jwt.verify(token, secret);
+            // @ts-ignore
+            socket.user = payload;
+            console.log('Socket auth success for user:', (payload as any).userId);
             next();
-        } catch (e) {
+        } catch (e: any) {
+            console.error('Socket JWT Verify Error:', e.message);
             next(new Error('Invalid token'));
         }
     });
