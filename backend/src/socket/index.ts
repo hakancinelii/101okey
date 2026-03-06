@@ -471,12 +471,28 @@ export const initSocket = (httpServer: HttpServer) => {
                 }
 
                 // Bot Discard
-                let discardIndex = 0;
-                if (currentHand.length > 1) {
-                    const jokerNumber = (okeyTile.number % 13) + 1;
-                    const nonOkeyIdx = currentHand.findIndex((t: Tile) => !(t.color === okeyTile.color && t.number === jokerNumber));
+                let discardIndex = -1;
+                const tilesInSets = new Set<string>();
+                setsFound.forEach(set => set.forEach(t => tilesInSets.add(t.id)));
+
+                // Prefer discarding tiles not in any sets and not Okey
+                let uselessIdx = currentHand.findIndex((t: Tile) => {
+                    const isOkey = (t.color === okeyTile.color && t.number === jokerNumber) || t.isJoker;
+                    return !isOkey && !tilesInSets.has(t.id);
+                });
+
+                if (uselessIdx !== -1) {
+                    discardIndex = uselessIdx;
+                } else {
+                    // Fallback to any non-Okey tile
+                    const nonOkeyIdx = currentHand.findIndex((t: Tile) => {
+                        const isOkey = (t.color === okeyTile.color && t.number === jokerNumber) || t.isJoker;
+                        return !isOkey;
+                    });
                     if (nonOkeyIdx !== -1) discardIndex = nonOkeyIdx;
+                    else discardIndex = 0; // Absolute fallback
                 }
+
                 const discardedTile = currentHand[discardIndex];
                 currentHand.splice(discardIndex, 1);
 

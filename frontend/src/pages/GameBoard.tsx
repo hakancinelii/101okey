@@ -765,7 +765,7 @@ const GameBoard: React.FC = () => {
     const renderOpenSetsArea = (player: Member | null) => {
         if (!player || !player.openSets || player.openSets.length === 0) return null;
         return (
-            <div className="flex flex-wrap gap-1.5 justify-center items-start p-2 max-h-[120px] w-full overflow-y-auto no-scrollbar bg-black/30 rounded-2xl border border-white/5 backdrop-blur-sm shadow-xl">
+            <div className="flex flex-col flex-nowrap gap-2 justify-start items-center p-2 max-h-[140px] w-full overflow-y-auto no-scrollbar bg-black/30 rounded-2xl border border-white/5 backdrop-blur-sm shadow-xl">
                 {player.openSets.map((set: Tile[], sIdx: number) => (
                     <div
                         key={sIdx}
