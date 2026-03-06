@@ -47,89 +47,123 @@ export function distributeTiles(pool: Tile[], memberCount: number): { hands: Til
 export function calculateSetScore(tiles: Tile[], okeyTile: Tile): { isValid: boolean, score: number } {
     if (tiles.length < 3) return { isValid: false, score: 0 };
 
-    // Resolve Okeys and Fake Jokers values for the set
-    // In 101, Okey tile (matching color/num of indicator+1) is a wildcard.
-    // Fake Joker tiles take the value of that Okey tile.
-    const resolvedTiles = tiles.map(t => {
+    // Mark wildcards
+    const tilesWithMeta = tiles.map(t => {
         const isOkey = t.isJoker || (okeyTile && t.color === okeyTile.color && t.number === okeyTile.number);
-        if (isOkey) return { ...t, isWildcard: true };
-        if (t.isFakeJoker) return { ...t, color: okeyTile.color, number: okeyTile.number };
-        return t;
+        return { ...t, isWildcard: isOkey };
     });
 
-    const isGroup = isValidGroup(resolvedTiles);
-    const isSeq = isValidSequence(resolvedTiles);
-
-    if (!isGroup && !isSeq) return { isValid: false, score: 0 };
-
-    // Total score is sum of numbers
-    // For wildcard tiles, we need to infer their value based on position
-    let totalScore = 0;
-    if (isGroup) {
-        // In a group, all tiles have the same number
-        const baseNum = resolvedTiles.find(t => !(t as any).isWildcard)?.number || okeyTile.number;
-        totalScore = baseNum * resolvedTiles.length;
-    } else {
-        // In a sequence, numbers are consecutive
-        // Find a concrete tile to start from
-        const concreteIdx = resolvedTiles.findIndex(t => !(t as any).isWildcard);
-        if (concreteIdx === -1) {
-            // All okeys? Unlikely but let's handle
-            return { isValid: false, score: 0 };
-        }
-        const baseNum = resolvedTiles[concreteIdx].number;
-        // Calculate the value of each tile position
-        resolvedTiles.forEach((t, i) => {
-            let val = baseNum - (concreteIdx - i);
-            if (val <= 0) val = 13 + val; // wrap around for 1-2-3 (if we allowed it at start, usually 12-13-1)
-            if (val > 13) val = val % 13;
-            totalScore += val;
-        });
+    // Check if it's a valid group (same number, different colors)
+    if (isValidGroup(tilesWithMeta)) {
+        const nonWildcards = tilesWithMeta.filter(t => !t.isWildcard);
+        // If all wildcards, use okeyTile number (unlikely edge case)
+        const baseNum = nonWildcards.length > 0 ? nonWildcards[0].number : okeyTile.number;
+        return { isValid: true, score: baseNum * tiles.length };
     }
 
-    return { isValid: true, score: totalScore };
+    // Check if it's a valid sequence (consecutive numbers, same color)
+    const seqResult = getSequenceScore(tilesWithMeta);
+    if (seqResult.isValid) {
+        return seqResult;
+    }
+
+    return { isValid: false, score: 0 };
 }
 
 function isValidGroup(tiles: any[]): boolean {
     if (tiles.length < 3 || tiles.length > 4) return false;
-    const baseNum = tiles.find(t => !t.isWildcard)?.number;
-    if (!baseNum) return true; // all wildcards?
+    const nonWildcards = tiles.filter(t => !t.isWildcard);
+    if (nonWildcards.length === 0) return true;
 
+    const baseNum = nonWildcards[0].number;
     const colors = new Set();
-    for (const t of tiles) {
-        if (!t.isWildcard && t.number !== baseNum) return false;
-        if (!t.isWildcard) {
-            if (colors.has(t.color)) return false; // same color not allowed in group
-            colors.add(t.color);
-        }
+    for (const t of nonWildcards) {
+        if (t.number !== baseNum) return false;
+        if (colors.has(t.color)) return false;
+        colors.add(t.color);
     }
     return true;
 }
 
-function isValidSequence(tiles: any[]): boolean {
-    if (tiles.length < 3) return false;
-    const color = tiles.find(t => !t.isWildcard)?.color;
-    if (!color) return true;
-
-    // Check color and consecutiveness
-    for (let i = 0; i < tiles.length; i++) {
-        if (!tiles[i].isWildcard && tiles[i].color !== color) return false;
+function getSequenceScore(tiles: any[]): { isValid: boolean, score: number } {
+    if (tiles.length < 3) return { isValid: false, score: 0 };
+    const nonWildcards = tiles.filter(t => !t.isWildcard);
+    if (nonWildcards.length === 0) {
+        // All wildcards - not normally possible in 101, but for completeness:
+        return { isValid: true, score: 0 }; // We can't infer values without at least one concrete tile
     }
 
-    // Check numbers
-    const concreteIdx = tiles.findIndex(t => !t.isWildcard);
-    const baseNum = tiles[concreteIdx].number;
+    // All must be same color
+    const color = nonWildcards[0].color;
+    if (!nonWildcards.every(t => t.color === color)) return { isValid: false, score: 0 };
 
-    for (let i = 0; i < tiles.length; i++) {
-        if (tiles[i].isWildcard) continue;
-        let expected = baseNum - (concreteIdx - i);
-        // handle wrap 12-13-1
-        if (expected <= 0) expected = 13 + expected;
-        if (expected > 13) expected = expected % 13;
-        if (tiles[i].number !== expected) return false;
+    // Sort non-wildcards
+    const sorted = [...nonWildcards].sort((a, b) => a.number - b.number);
+
+    // Check for duplicates
+    for (let i = 0; i < sorted.length - 1; i++) {
+        if (sorted[i].number === sorted[i + 1].number) return { isValid: false, score: 0 };
     }
 
-    return true;
+    // Check gaps
+    let gaps = 0;
+    for (let i = 0; i < sorted.length - 1; i++) {
+        gaps += (sorted[i + 1].number - sorted[i].number - 1);
+    }
+
+    const wildcardCount = tiles.length - nonWildcards.length;
+    if (wildcardCount < gaps) return { isValid: false, score: 0 };
+
+    // We have enough wildcards. Now calculate total score.
+    // In sequence, characters are consecutive. 
+    // We need to find the the 'start' number of the sequence.
+    // The sequence could have wildcards at the start and end.
+
+    // Simplest way: The gap logic tells us the wildcards MUST fit between the concrete tiles.
+    // Any remaining wildcards can go at either end. 
+    // In 101 Okey, we usually calculate score based on the values the wildcards TAKE.
+
+    // To find the range:
+    const minNum = sorted[0].number;
+    const maxNum = sorted[sorted.length - 1].number;
+
+    // The range covered by concrete tiles is [minNum, maxNum] with total maxNum - minNum + 1 slots.
+    // Number of concrete tiles is sorted.length.
+    // Missing slots = (maxNum - minNum + 1) - sorted.length = gaps. (This is already checked).
+
+    // Remaining wildcards:
+    let extraWildcards = wildcardCount - gaps;
+
+    // Where do extra wildcards go? Standard 101 usually expects they replace specific tiles.
+    // However, if the user sends 4 tiles [10, 11, 12, Joker], the Joker is 13.
+    // If [Joker, 10, 11, 12], the Joker is 9.
+
+    // IN FRONTEND, the user usually arranges them. But here we just have an array.
+    // Let's assume the wildcards are placed to extend the sequence.
+    // If gaps are filled, we have a solid block of maxNum - minNum + 1 tiles.
+    // The score for this block is sum of numbers from minNum to maxNum.
+    let currentScore = 0;
+    for (let j = minNum; j <= maxNum; j++) currentScore += j;
+
+    // For extra wildcards, we add them at the end (or start if end hits 13).
+    let high = maxNum;
+    let low = minNum;
+
+    while (extraWildcards > 0) {
+        if (high < 13) {
+            high++;
+            currentScore += high;
+        } else if (low > 1) {
+            low--;
+            currentScore += low;
+        } else {
+            // Can't extend anymore? Invalid sequence
+            return { isValid: false, score: 0 };
+        }
+        extraWildcards--;
+    }
+
+    return { isValid: true, score: currentScore };
 }
 export function calculateMultipleSetsScore(sets: Tile[][], okeyTile: Tile): { isValid: boolean, totalScore: number } {
     let totalScore = 0;
