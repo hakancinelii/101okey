@@ -419,12 +419,6 @@ const GameBoard: React.FC = () => {
         setSelectedTileIds(new Set());
     };
 
-    const clearPendingSets = () => {
-        const allTiles = pendingSets.flat();
-        setHand(prev => [...prev, ...allTiles]);
-        setPendingSets([]);
-    };
-
     const sortSeri = () => {
         // 1. Identify sets (runs or groups)
         const tiles = [...hand];
@@ -810,11 +804,11 @@ const GameBoard: React.FC = () => {
 
     const PlayerSpot: React.FC<{ player: Member | null; isTurn: boolean; relativePos: number }> = ({ player, isTurn, relativePos }) => {
         return (
-            <div className={`absolute flex flex-col items-center pointer-events-auto transition-all duration-700
-                ${relativePos === 0 ? 'bottom-2 left-1/2 -translate-x-1/2' : ''}
-                ${relativePos === 1 ? 'right-6 top-1/2 -translate-y-1/2' : ''}
-                ${relativePos === 2 ? 'top-2 left-1/2 -translate-x-1/2 flex-col-reverse' : ''}
-                ${relativePos === 3 ? 'left-6 top-1/2 -translate-y-1/2' : ''}`}
+            <div className={`absolute flex flex-col items-center pointer-events-auto transition-all duration-700 z-50
+                ${relativePos === 0 ? 'bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 mb-4' : ''}
+                ${relativePos === 1 ? 'right-0 top-1/2 -translate-y-1/2 translate-x-1/2 mr-4' : ''}
+                ${relativePos === 2 ? 'top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 mt-4 flex-col-reverse' : ''}
+                ${relativePos === 3 ? 'left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 ml-4' : ''}`}
             >
                 <div className="relative">
                     {/* Turn Glow Effect */}
@@ -854,17 +848,6 @@ const GameBoard: React.FC = () => {
                         </div>
                     )}
                 </div>
-
-                {/* Open Sets Container Overlay */}
-                {player && player.openSets && player.openSets.length > 0 && (
-                    <div className={`absolute pointer-events-auto transition-all duration-500 ${relativePos === 0 ? 'bottom-full mb-32 w-[600px]' :
-                        relativePos === 1 ? 'right-full mr-12 w-[350px]' :
-                            relativePos === 2 ? 'top-full mt-32 w-[600px]' :
-                                'left-full ml-12 w-[350px]'
-                        }`}>
-                        {renderOpenSetsArea(player)}
-                    </div>
-                )}
             </div>
         );
     };
@@ -952,6 +935,15 @@ const GameBoard: React.FC = () => {
         );
     };
 
+    const toggleTileSelection = (tileId: string) => {
+        setSelectedTileIds(prev => {
+            const next = new Set(prev);
+            if (next.has(tileId)) next.delete(tileId);
+            else next.add(tileId);
+            return next;
+        });
+    };
+
     const isMyTurn = turnIndex === mySeat;
 
     return (
@@ -998,107 +990,117 @@ const GameBoard: React.FC = () => {
 
             {/* Main Game Area */}
             <div className="flex-1 relative flex items-center justify-center p-8 overflow-hidden">
-
                 {/* Drag-to-discard visual hints */}
                 {draggingIdx !== null && draggingIdx >= 0 && (
                     <>
-                        {/* Top zone: fling up to discard */}
-                        <div className={`absolute top-0 left-0 right-0 h-28 z-50 flex items-center justify-center transition-all duration-200 pointer-events-none
-                            ${dragPos.y < -80
-                                ? 'bg-red-500/40 border-b-4 border-red-400 shadow-[0_0_40px_rgba(239,68,68,0.5)]'
-                                : 'bg-red-500/10 border-b-2 border-dashed border-red-500/30'}`}>
-                            <span className="text-red-300 text-xs font-black tracking-widest uppercase flex items-center gap-2">
-                                ↑ AT
-                            </span>
+                        <div className={`absolute top-0 left-0 right-0 h-28 z-[100] flex items-center justify-center transition-all duration-200 pointer-events-none
+                            ${dragPos.y < -80 ? 'bg-red-500/40 border-b-4 border-red-400 shadow-[0_0_40px_rgba(239,68,68,0.5)]' : 'bg-red-500/10 border-b-2 border-dashed border-red-500/30'}`}>
+                            <span className="text-red-300 text-xs font-black tracking-widest uppercase flex items-center gap-2">↑ AT</span>
                         </div>
-                        {/* Right zone: fling right to discard */}
-                        <div className={`absolute top-0 right-0 bottom-0 w-28 z-50 flex items-center justify-center transition-all duration-200 pointer-events-none
-                            ${dragPos.x > 120
-                                ? 'bg-red-500/40 border-l-4 border-red-400 shadow-[0_0_40px_rgba(239,68,68,0.5)]'
-                                : 'bg-red-500/10 border-l-2 border-dashed border-red-500/30'}`}>
-                            <span className="text-red-300 text-xs font-black tracking-widest uppercase flex items-center gap-2 [writing-mode:vertical-lr]">
-                                → AT
-                            </span>
+                        <div className={`absolute top-0 right-0 bottom-0 w-28 z-[100] flex items-center justify-center transition-all duration-200 pointer-events-none
+                            ${dragPos.x > 120 ? 'bg-red-500/40 border-l-4 border-red-400 shadow-[0_0_40px_rgba(239,68,68,0.5)]' : 'bg-red-500/10 border-l-2 border-dashed border-red-500/30'}`}>
+                            <span className="text-red-300 text-xs font-black tracking-widest uppercase flex items-center gap-2 [writing-mode:vertical-lr]">→ AT</span>
                         </div>
                     </>
                 )}
 
-                {/* 4 players quadrants structure */}
-                <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="w-[85%] h-[75%] table-surface rounded-[60px] relative">
-                        <div className="absolute inset-0 z-0 pointer-events-none p-4 lg:p-12">
-                            <div className="grid grid-cols-2 grid-rows-2 w-full h-full gap-8">
-                                {/* Top-Left Quadrant (Left Player) */}
-                                <div className="flex items-start justify-start">
-                                    {renderOpenSetsArea(getPlayerByRelativePos(3))}
-                                </div>
-                                {/* Top-Right Quadrant (Top Player) */}
-                                <div className="flex items-start justify-end">
-                                    {renderOpenSetsArea(getPlayerByRelativePos(2))}
-                                </div>
-                                {/* Bottom-Left Quadrant (Self) */}
-                                <div className="flex items-end justify-start">
-                                    {renderOpenSetsArea(getPlayerByRelativePos(0))}
-                                </div>
-                                {/* Bottom-Right Quadrant (Right Player) */}
-                                <div className="flex items-end justify-end">
-                                    {renderOpenSetsArea(getPlayerByRelativePos(1))}
-                                </div>
+                {/* Table Surface - The Green Play Area */}
+                <div className="w-[88%] h-[78%] table-surface rounded-[80px] relative shadow-[0_40px_100px_rgba(0,0,0,0.6)] border-4 border-white/5">
+                    {/* Table quadrants for Opened Sets - Positioned in front of players */}
+                    <div className="absolute inset-0 z-10 pointer-events-none p-4 lg:p-8">
+                        <div className="grid grid-cols-3 grid-rows-3 w-full h-full gap-4">
+                            {/* TOP: Player 2 hands */}
+                            <div className="col-start-1 col-end-4 row-start-1 flex items-start justify-center pt-4">
+                                {renderOpenSetsArea(getPlayerByRelativePos(2))}
+                            </div>
+                            {/* LEFT: Player 3 hands */}
+                            <div className="col-start-1 row-start-2 flex items-center justify-start pl-4">
+                                <div className="w-[280px]">{renderOpenSetsArea(getPlayerByRelativePos(3))}</div>
+                            </div>
+                            {/* RIGHT: Player 1 hands */}
+                            <div className="col-start-3 row-start-2 flex items-center justify-end pr-4">
+                                <div className="w-[280px]">{renderOpenSetsArea(getPlayerByRelativePos(1))}</div>
+                            </div>
+                            {/* BOTTOM: Your hands */}
+                            <div className="col-start-1 col-end-4 row-start-3 flex items-end justify-center pb-4">
+                                {renderOpenSetsArea(getPlayerByRelativePos(0))}
                             </div>
                         </div>
-                        {/* Watermark Logo */}
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <div className="relative flex flex-col items-center">
-                                <span className="text-[180px] font-black opacity-[0.02] select-none tracking-tighter leading-none">101</span>
-                                <span className="text-xl font-black opacity-10 tracking-[1em] -mt-8">PLUS</span>
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                    <div className="w-56 h-56 border border-white/5 rounded-full opacity-10"></div>
-                                    <div className="absolute w-72 h-72 border border-white/[0.02] rounded-full"></div>
-                                </div>
-                            </div>
-                        </div>
+                    </div>
 
-                        {/* Center Table Info (Stakes/Pot) */}
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-48 flex flex-col items-center space-y-1 z-0">
-                            <div className="px-4 py-1 bg-black/40 rounded-full border border-white/5 backdrop-blur-md flex items-center space-x-3">
-                                <div className="flex items-center">
-                                    <span className="text-[10px] font-black opacity-40 mr-2 uppercase tracking-tighter">Masa:</span>
-                                    <span className="text-[11px] font-bold text-amber-500">#{gameId?.slice(-4).toUpperCase()}</span>
+                    {/* Table Markers & Logo */}
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+                        <div className="relative flex flex-col items-center">
+                            <span className="text-[180px] font-black tracking-tighter leading-none">101</span>
+                            <span className="text-xl font-black tracking-[1em] -mt-8">PLUS</span>
+                        </div>
+                    </div>
+
+                    {/* Table Center Info */}
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-48 flex flex-col items-center space-y-1 z-0">
+                        <div className="px-4 py-1.5 bg-black/40 rounded-full border border-white/5 backdrop-blur-md flex items-center space-x-3 shadow-xl">
+                            <span className="text-[10px] font-black opacity-40 uppercase tracking-widest">Masa</span>
+                            <span className="text-[11px] font-bold text-amber-500">#{gameId?.slice(-4).toUpperCase()}</span>
+                            <div className="w-[1px] h-3 bg-white/10"></div>
+                            <span className="text-[11px] font-bold text-green-400">25,000</span>
+                        </div>
+                    </div>
+
+                    {/* Discard Pile */}
+                    <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+                        <div id="discard-zone" className="relative w-56 h-44">
+                            {discardHistory.length === 0 && (
+                                <div className="absolute inset-0 flex items-center justify-center opacity-10">
+                                    <div className="w-14 h-20 border-2 border-dashed border-white/50 rounded-xl flex items-center justify-center">
+                                        <span className="text-xl font-black">∅</span>
+                                    </div>
                                 </div>
-                                <div className="w-[1px] h-3 bg-white/10"></div>
-                                <div className="flex items-center">
-                                    <span className="text-[10px] font-black opacity-40 mr-2 uppercase tracking-tighter">Katılım:</span>
-                                    <span className="text-[11px] font-bold">25,000</span>
-                                </div>
-                            </div>
-                            <div className="text-[9px] font-black opacity-20 uppercase tracking-[0.2em]">Okey Plus Pro</div>
+                            )}
+                            {discardHistory.map((entry, idx) => {
+                                const isLatest = idx === discardHistory.length - 1;
+                                const tile = entry.tile;
+                                const seed = idx * 137.508;
+                                const rotDeg = ((seed % 30) - 15);
+                                const offX = ((seed * 1.5) % 100) - 50;
+                                const offY = ((seed * 0.8) % 80) - 40;
+                                return (
+                                    <div
+                                        key={idx}
+                                        style={{
+                                            position: 'absolute', top: '50%', left: '50%',
+                                            transform: `translate(calc(-50% + ${offX}px), calc(-50% + ${offY}px)) rotate(${rotDeg}deg)`,
+                                            zIndex: idx, pointerEvents: isLatest ? 'auto' : 'none'
+                                        }}
+                                        className={`transition-all duration-300 ${isLatest && draggingIdx === -101 ? 'opacity-0 scale-50' : 'opacity-100'}`}
+                                        onMouseDown={(e) => isLatest && handleDragStart(e as unknown as React.PointerEvent, -101)}
+                                    >
+                                        {renderTile(tile)}
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
-                {/* Player Spots - Modern Circular Design */}
-                <div className="absolute inset-0 max-w-7xl mx-auto pointer-events-none">
+
+                {/* Player Avatars - Outside the green table */}
+                <div className="absolute inset-0 max-w-7xl mx-auto pointer-events-none z-30">
                     <PlayerSpot player={getPlayerByRelativePos(0)} isTurn={turnIndex === (getPlayerByRelativePos(0)?.seat ?? -1)} relativePos={0} />
                     <PlayerSpot player={getPlayerByRelativePos(1)} isTurn={turnIndex === (getPlayerByRelativePos(1)?.seat ?? -1)} relativePos={1} />
                     <PlayerSpot player={getPlayerByRelativePos(2)} isTurn={turnIndex === (getPlayerByRelativePos(2)?.seat ?? -1)} relativePos={2} />
                     <PlayerSpot player={getPlayerByRelativePos(3)} isTurn={turnIndex === (getPlayerByRelativePos(3)?.seat ?? -1)} relativePos={3} />
                 </div>
 
-                {/* ====== BOTTOM HUD: Okey & Deck (Flanking Player Avatar) ====== */}
+                {/* Bottom HUD - Flanking player avatar */}
                 <div className="absolute bottom-20 left-1/2 -translate-x-1/2 w-full max-w-4xl flex items-end justify-center pointer-events-none z-40">
-                    <div className="relative w-full flex items-center justify-center gap-32">
-                        {/* Okey Indicator - Left Pod */}
+                    <div className="relative w-full flex items-center justify-center gap-32 pb-4">
                         <div className="pointer-events-auto">
                             <div className="flex flex-col items-center glass-hud py-2 px-3 rounded-2xl border border-white/10 bg-black/60 shadow-2xl scale-90">
                                 <span className="text-[7px] uppercase font-black opacity-30 mb-1 tracking-widest text-amber-500 whitespace-nowrap">{t('okeyTile')}</span>
-                                <div className="scale-75">
-                                    {okeyTile && renderTile(okeyTile)}
-                                </div>
+                                <div className="scale-75">{okeyTile && renderTile(okeyTile)}</div>
                             </div>
                         </div>
-
-                        {/* Deck - Right Pod */}
                         <div className="pointer-events-auto">
-                            <div className="flex flex-col items-center bg-black/60 px-4 py-4 rounded-3xl border border-white/10 backdrop-blur-md shadow-2xl scale-90">
+                            <div className="flex flex-col items-center bg-black/60 px-4 py-4 rounded-3xl border border-white/10 backdrop-blur-md shadow-2xl scale-95">
                                 <span className="text-[7px] uppercase font-black opacity-30 mb-1 tracking-widest text-white whitespace-nowrap">{t('deckLabel')}</span>
                                 <div className={`relative group ${hasDrawn || !isMyTurn ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
                                     onClick={() => { if (!hasDrawn && isMyTurn) drawTile(); }}
@@ -1110,16 +1112,14 @@ const GameBoard: React.FC = () => {
                                 </div>
                             </div>
                         </div>
-
-                        {/* Scoreboard - Small side panel (Keep at bottom right) */}
                         <div className="absolute bottom-4 -right-12 pointer-events-auto group">
-                            <div className="w-10 h-10 bg-black/60 rounded-full border border-white/10 flex items-center justify-center hover:w-32 hover:rounded-xl transition-all overflow-hidden cursor-help">
+                            <div className="w-10 h-10 bg-black/60 rounded-full border border-white/10 flex items-center justify-center hover:w-32 hover:rounded-xl transition-all overflow-hidden cursor-help shadow-2xl">
                                 <span className="text-sm shrink-0">📊</span>
                                 <div className="hidden group-hover:flex flex-col ml-2 pr-2">
                                     {members.slice(0, 4).map(m => (
                                         <div key={m.userId} className="flex justify-between w-20 text-[8px] font-black uppercase">
                                             <span className="truncate mr-1">{m.name}</span>
-                                            <span className="text-amber-400">{m.openScore || 0}</span>
+                                            <span className="text-amber-400">{m.penaltyScore || 0}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -1128,327 +1128,137 @@ const GameBoard: React.FC = () => {
                     </div>
                 </div>
 
-                {/* ====== DISCARD PILE - centered on table ====== */}
-                <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
-                    <div className="relative w-52 h-40">
-                        {discardHistory.length === 0 && (
-                            <div className="absolute inset-0 flex items-center justify-center">
-                                <div className="w-14 h-20 border-2 border-dashed border-white/10 rounded-xl flex items-center justify-center">
-                                    <span className="text-white/10 text-sm font-black">∅</span>
-                                </div>
-                            </div>
-                        )}
-                        {discardHistory.map((entry, idx) => {
-                            const isLatest = idx === discardHistory.length - 1;
-                            const tile = entry.tile;
-                            const seed = idx * 137.508;
-                            const rotDeg = ((seed % 30) - 15);
-                            const offX = ((seed * 1.3) % 80) - 40;
-                            const offY = ((seed * 0.7) % 60) - 30;
-                            const colorClass: Record<string, string> = {
-                                red: 'text-red-500', blue: 'text-blue-500',
-                                black: 'text-slate-900', yellow: 'text-amber-500'
-                            };
-                            return (
-                                <div
-                                    key={idx}
-                                    title={`${Array.isArray(members) ? members.find(m => m.userId === entry.userId)?.name || '?' : '?'} attı`}
-                                    style={{
-                                        position: 'absolute',
-                                        top: '50%', left: '50%',
-                                        transform: `translate(calc(-50% + ${offX}px), calc(-50% + ${offY}px)) rotate(${rotDeg}deg)`,
-                                        zIndex: idx,
-                                        pointerEvents: isLatest ? 'auto' : 'none'
-                                    }}
-                                    onClick={() => isLatest && isMyTurn && !hasDrawn && drawDiscard()}
-                                    onPointerDown={(e) => {
-                                        if (!isLatest || !isMyTurn || hasDrawn) return;
-                                        (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-                                        setDraggingIdx(-101);
-                                        setDragStart({ x: e.clientX, y: e.clientY });
-                                        setDragPos({ x: 0, y: 0 });
-                                    }}
-                                    className={`transition-all duration-300 ${isLatest ? 'cursor-pointer' : ''}`}
-                                >
-                                    <div className={`w-10 h-14 rounded-lg flex flex-col items-center justify-center bg-amber-50 shadow-lg border transition-all
-                                        ${isLatest
-                                            ? 'border-blue-400 shadow-[0_0_18px_rgba(59,130,246,0.7)] scale-125 hover:-translate-y-1'
-                                            : 'border-amber-200/60 opacity-75'}`}
-                                    >
-                                        <span className={`text-[14px] font-black leading-none ${colorClass[tile.color] || 'text-gray-800'}`}>
-                                            {tile.number}
-                                        </span>
-                                        <div className="w-1.5 h-1.5 rounded-full mt-0.5 border border-black/10"
-                                            style={{ backgroundColor: tile.color === 'yellow' ? '#f59e0b' : tile.color === 'black' ? '#0f172a' : tile.color }}
-                                        />
-                                    </div>
-                                    {isLatest && isMyTurn && !hasDrawn && (
-                                        <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[8px] font-black text-blue-200 bg-blue-600/80 px-2 py-0.5 rounded-full whitespace-nowrap shadow-lg animate-bounce">
-                                            AL
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-
-                {/* Center Stats & Scoreboard - Positioned to side-step the discard pile */}
-                {/* Discarded tile area could be here if needed */}
-
-
-                {/* Pending Sets Area - Moved up to avoid rack overlap */}
+                {/* Pending Sets Area */}
                 {pendingSets.length > 0 && (
-                    <div className="absolute top-[10%] left-1/2 -translate-x-1/2 flex flex-nowrap gap-4 justify-start items-center animate-okey-glow max-w-[90%] p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md overflow-x-auto no-scrollbar scroll-smooth z-30">
+                    <div className="absolute top-[12%] left-1/2 -translate-x-1/2 flex flex-nowrap gap-4 justify-start items-center animate-okey-glow max-w-[90%] p-4 rounded-3xl bg-black/40 border border-white/10 backdrop-blur-md overflow-x-auto no-scrollbar scroll-smooth z-30 shadow-2xl">
                         {pendingSets.map((set, idx) => (
-                            <div key={idx} className="flex gap-0.5 bg-black/40 p-2 rounded-lg border border-white/10 relative group shrink-0">
+                            <div key={idx} className="flex gap-0.5 bg-black/40 p-2 rounded-xl border border-white/10 relative group shrink-0">
                                 {set.map(t => renderTile(t))}
                                 <button
                                     onClick={() => {
-                                        setHand(prev => {
-                                            const newHand = [...prev, ...set];
-                                            const handIds = new Set(newHand.map(t => t.id));
-                                            return newHand.filter((t, i, a) => handIds.has(t.id) && a.findIndex(at => at.id === t.id) === i);
-                                        });
+                                        setHand(prev => [...prev, ...set]);
                                         setPendingSets(prev => prev.filter((_, i) => i !== idx));
                                     }}
                                     className="absolute -top-2 -right-2 w-6 h-6 bg-red-600 text-white rounded-full flex items-center justify-center text-[11px] opacity-0 group-hover:opacity-100 transition-all shadow-xl hover:scale-125 z-10"
-                                >
-                                    ✕
-                                </button>
+                                >✕</button>
                             </div>
                         ))}
                     </div>
                 )}
             </div>
 
-            {/* Bottom - Player Rack (İsteka) */}
-            <div className="h-44 w-full flex items-center justify-center px-4 relative">
-                <div className="flex flex-col space-y-2 mr-4">
-                    <button onClick={sortCift} className="w-14 h-24 btn-premium btn-blue p-2">
-                        <span className="[writing-mode:vertical-lr] rotate-180 text-[10px] font-black">{t('sortCiftAction')}</span>
-                    </button>
-                    <button onClick={clearPendingSets} className="w-14 h-12 btn-premium btn-red">
-                        <span className="scale-125">🗑️</span>
-                    </button>
-                </div>
-
-                {/* The Wooden İsteka */}
-                <div className="relative flex-1 max-w-[1100px] h-36 bg-isteka rounded-xl p-3 flex flex-col justify-between shadow-2xl overflow-hidden">
-                    {/* Hand Row 1 */}
-                    <div className="isteka-row w-full flex items-center justify-center">
-                        {rackSlots.slice(0, 22).map((tile, i) => (
-                            <div
-                                key={i}
-                                data-slot-idx={i}
-                                className={`w-[46px] h-16 flex items-center justify-center transition-colors relative ${draggingIdx !== null ? 'hover:bg-white/5' : ''}`}
-                            >
-                                {tile && renderGameTile(tile, () => {
-                                    const newSet = new Set(selectedTileIds);
-                                    if (newSet.has(tile.id)) newSet.delete(tile.id);
-                                    else newSet.add(tile.id);
-                                    setSelectedTileIds(newSet);
-                                }, i)}
-                                {!tile && <div className="absolute inset-1 border border-dashed border-white/5 rounded-lg pointer-events-none"></div>}
-                            </div>
-                        ))}
-                    </div>
-                    {/* Hand Row 2 */}
-                    <div className="isteka-row w-full flex items-center justify-center">
-                        {rackSlots.slice(22, 44).map((tile, i) => {
-                            const actualIdx = i + 22;
-                            return (
-                                <div
-                                    key={actualIdx}
-                                    data-slot-idx={actualIdx}
-                                    className={`w-[46px] h-16 flex items-center justify-center transition-colors relative ${draggingIdx !== null ? 'hover:bg-white/5' : ''}`}
-                                >
-                                    {tile && renderGameTile(tile, () => {
-                                        const newSet = new Set(selectedTileIds);
-                                        if (newSet.has(tile.id)) newSet.delete(tile.id);
-                                        else newSet.add(tile.id);
-                                        setSelectedTileIds(newSet);
-                                    }, actualIdx)}
-                                    {!tile && <div className="absolute inset-1 border border-dashed border-white/5 rounded-lg pointer-events-none"></div>}
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-
-                {/* Left Side Buttons (Utility/Sort) */}
-                <div className="flex flex-col space-y-3 mr-6">
-                    <div className="flex flex-col space-y-2">
-                        <span className="text-[9px] font-black opacity-30 text-center uppercase tracking-widest">DİZİLİM</span>
-                        <button
-                            onClick={sortSeri}
-                            className="w-12 h-12 btn-premium btn-blue flex flex-col items-center justify-center group"
-                        >
-                            <span className="text-lg group-hover:scale-110 transition-transform">🪜</span>
-                            <span className="text-[8px] font-black uppercase mt-0.5">SERİ</span>
-                        </button>
-                        <button
-                            onClick={sortCift}
-                            className="w-12 h-12 btn-premium btn-blue flex flex-col items-center justify-center group"
-                        >
-                            <span className="text-lg group-hover:scale-110 transition-transform">👥</span>
-                            <span className="text-[8px] font-black uppercase mt-0.5">ÇİFT</span>
-                        </button>
-                    </div>
-
-                    <div className="flex flex-col space-y-1">
-                        <span className="text-[9px] font-black opacity-30 text-center uppercase tracking-widest">DÜZELT</span>
-                        <button
-                            onClick={undoDrawDiscard}
-                            disabled={!mustOpen}
-                            className={`w-12 h-10 btn-premium btn-red flex flex-col items-center justify-center transition-all ${!mustOpen ? 'opacity-20 grayscale cursor-not-allowed' : 'animate-pulse'}`}
-                        >
-                            <span className="text-xs">↩</span>
-                            <span className="text-[7px] font-black uppercase">GERİ</span>
-                        </button>
-                    </div>
-                </div>
-
-                {/* Center Tray Overlay info (Turn, calculation) */}
-                <div className="absolute -top-12 left-1/2 -translate-x-1/2 flex items-center space-x-4">
-                    <div className="bg-black/60 px-4 py-1.5 rounded-full backdrop-blur-md border border-white/10 flex items-center space-x-4">
+            {/* Bottom Section: Rack & Controls */}
+            <div className="h-52 w-full flex flex-col items-center justify-end px-4 relative pb-2 overflow-visible">
+                {/* HUD Info Area Above Rack */}
+                <div className="absolute -top-12 left-1/2 -translate-x-1/2 flex items-center space-x-4 z-40">
+                    <div className="bg-black/60 px-5 py-2 rounded-full backdrop-blur-md border border-white/10 flex items-center space-x-6 shadow-2xl">
                         <div className="flex items-center space-x-1">
                             {pendingSets.length >= 5 && pendingSets.every(s => s.length === 2) ? (
-                                <>
-                                    <span className="text-[10px] font-black text-blue-400">ÇİFT:</span>
-                                    <span className={`text-xs font-black ${pendingSets.length >= 5 ? 'text-green-400' : 'text-white'}`}>
-                                        {pendingSets.length}
-                                    </span>
-                                </>
+                                <><span className="text-xs font-black text-blue-400">ÇİFT:</span><span className="text-sm font-black text-green-400">{pendingSets.length}</span></>
                             ) : (
-                                <>
-                                    <span className="text-[10px] font-black text-amber-500">101?</span>
-                                    <span className={`text-xs font-black ${pendingSets.flat().reduce((acc, t) => acc + ((t.isFakeJoker || (okeyTile && t.color === okeyTile.color && t.number === okeyTile.number)) ? 101 : t.number), 0) >= 101 ? 'text-green-400' : 'text-white'}`}>
-                                        {pendingSets.flat().reduce((acc, t) => acc + ((t.isFakeJoker || (okeyTile && t.color === okeyTile.color && t.number === okeyTile.number)) ? 101 : t.number), 0)}
-                                    </span>
-                                </>
+                                <><span className="text-xs font-black text-amber-500">101?</span><span className={`text-sm font-black ${pendingSets.flat().reduce((acc, t) => acc + (t.number === 0 ? 0 : t.number), 0) >= 101 ? 'text-green-400' : 'text-white'}`}>{pendingSets.flat().reduce((acc, t) => acc + (t.number === 0 ? 0 : t.number), 0)}</span></>
                             )}
                         </div>
-                        <div className="w-[1px] h-3 bg-white/20"></div>
-                        <span className={`text-[10px] font-black flex items-center ${isMyTurn ? 'text-green-400' : 'text-white/40'}`}>
+                        <div className="w-[1px] h-4 bg-white/20"></div>
+                        <span className={`text-[10px] font-black uppercase tracking-widest ${isMyTurn ? 'text-green-400 animate-pulse' : 'text-white/40'}`}>
                             {isMyTurn ? t('yourTurnMsg') : t('opponentTurnMsg')}
                         </span>
                     </div>
                 </div>
 
-                {/* Right Side Buttons (Game Actions) */}
-                <div className="flex flex-col space-y-3 ml-4">
-                    <div className="flex flex-col space-y-1.5">
-                        <span className="text-[9px] font-black opacity-40 text-center uppercase tracking-widest leading-none mb-1">HAMLE</span>
-                        <div className="flex flex-col gap-2">
-                            <button
-                                onClick={addGroup}
-                                className="w-14 h-14 btn-premium btn-green shadow-green-500/20 flex flex-col items-center justify-center group border-2 border-green-400/30"
-                            >
-                                <span className="text-2xl group-hover:scale-110 transition-transform">📦</span>
-                                <span className="text-[9px] font-black uppercase mt-1 leading-tight">{t('addGroup')}</span>
-                            </button>
-                            <button
-                                onClick={async () => {
-                                    if (pendingSets.length === 0) return alert(t('noSetsToOpen'));
-                                    await placeSets(pendingSets);
-                                }}
-                                className="w-14 h-14 btn-premium btn-amber shadow-amber-500/20 flex flex-col items-center justify-center group border-2 border-amber-400/30"
-                            >
-                                <span className="text-2xl group-hover:scale-110 transition-transform">📤</span>
-                                <span className="text-[9px] font-black uppercase mt-1 leading-tight">{t('placeOnTable')}</span>
-                            </button>
+                <div className="w-full max-w-[1300px] flex items-center justify-center space-x-4">
+                    {/* Controls Left */}
+                    <div className="flex flex-col space-y-3 mr-6">
+                        <div className="flex flex-col space-y-2">
+                            <span className="text-[9px] font-black opacity-30 text-center uppercase tracking-widest">DİZİLİM</span>
+                            <button onClick={sortSeri} className="w-12 h-12 btn-premium btn-blue flex flex-col items-center justify-center group"><span className="text-lg group-hover:scale-110 transition-transform">🪜</span><span className="text-[8px] font-black uppercase mt-0.5">SERİ</span></button>
+                            <button onClick={sortCift} className="w-12 h-12 btn-premium btn-blue flex flex-col items-center justify-center group"><span className="text-lg group-hover:scale-110 transition-transform">👥</span><span className="text-[8px] font-black uppercase mt-0.5">ÇİFT</span></button>
+                        </div>
+                        <button onClick={undoDrawDiscard} disabled={!mustOpen} className={`w-12 h-10 btn-premium btn-red flex flex-col items-center justify-center transition-all ${!mustOpen ? 'opacity-20 grayscale' : 'animate-pulse'}`}><span className="text-xs">↩</span><span className="text-[7px] font-black uppercase">GERİ</span></button>
+                    </div>
+
+                    {/* Wooden İsteka (Rack) */}
+                    <div className="relative flex-1 max-w-[1100px] h-40 bg-isteka rounded-2xl p-4 flex flex-col justify-between shadow-[0_20px_50px_rgba(0,0,0,0.8)] border-t-2 border-white/20">
+                        <div className="isteka-row w-full flex items-center justify-center gap-1">
+                            {rackSlots.slice(0, 22).map((tile, i) => (
+                                <div key={i} data-slot-idx={i} className={`w-[48px] h-[68px] flex items-center justify-center relative ${draggingIdx !== null ? 'hover:bg-white/5 rounded-lg' : ''}`}>
+                                    {tile && renderGameTile(tile, () => toggleTileSelection(tile.id), i)}
+                                    {!tile && <div className="absolute inset-1 border border-dashed border-white/5 rounded-lg pointer-events-none"></div>}
+                                </div>
+                            ))}
+                        </div>
+                        <div className="isteka-row w-full flex items-center justify-center gap-1">
+                            {rackSlots.slice(22, 44).map((tile, i) => {
+                                const idx = i + 22;
+                                return (
+                                    <div key={idx} data-slot-idx={idx} className={`w-[48px] h-[68px] flex items-center justify-center relative ${draggingIdx !== null ? 'hover:bg-white/5 rounded-lg' : ''}`}>
+                                        {tile && renderGameTile(tile, () => toggleTileSelection(tile.id), idx)}
+                                        {!tile && <div className="absolute inset-1 border border-dashed border-white/5 rounded-lg pointer-events-none"></div>}
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
 
-                    <div className="flex flex-col space-y-1.5">
-                        <span className="text-[9px] font-black opacity-40 text-center uppercase tracking-widest leading-none mb-1">BİTİR</span>
-                        <button
-                            id="discard-zone"
-                            onClick={async () => {
-                                if (selectedTileIds.size !== 1) return alert(t('selectOneToDiscard'));
-                                const tileId = [...selectedTileIds][0];
-                                await discardTile(tileId);
-                                setSelectedTileIds(new Set());
-                            }}
-                            className="w-14 h-14 btn-premium btn-red shadow-red-500/40 flex flex-col items-center justify-center group border-2 border-red-400/30"
-                        >
-                            <span className="text-2xl group-hover:-translate-y-1 transition-transform">🗑️</span>
-                            <span className="font-black text-[10px] mt-1 uppercase">{t('discardAction')}</span>
-                        </button>
+                    {/* Controls Right */}
+                    <div className="flex flex-col space-y-3 ml-4">
+                        <div className="flex flex-col space-y-1.5">
+                            <span className="text-[9px] font-black opacity-40 text-center uppercase tracking-widest leading-none mb-1">HAMLE</span>
+                            <div className="flex flex-col gap-2">
+                                <button onClick={addGroup} className="w-14 h-14 btn-premium btn-green border-2 border-green-400/30 flex flex-col items-center justify-center group shadow-xl"><span className="text-2xl group-hover:scale-110 transition-transform">📦</span><span className="text-[9px] font-black uppercase mt-1">{t('addGroup')}</span></button>
+                                <button onClick={async () => { if (pendingSets.length === 0) return alert(t('noSetsToOpen')); await placeSets(pendingSets); }}
+                                    className="w-14 h-14 btn-premium btn-amber border-2 border-amber-400/30 flex flex-col items-center justify-center group shadow-xl"><span className="text-2xl group-hover:scale-110 transition-transform">📤</span><span className="text-[9px] font-black uppercase mt-1">{t('placeOnTable')}</span></button>
+                            </div>
+                        </div>
+                        <div className="flex flex-col space-y-1.5">
+                            <span className="text-[9px] font-black opacity-40 text-center uppercase tracking-widest leading-none mb-1">BİTİR</span>
+                            <button id="discard-zone-btn"
+                                onClick={async () => { if (selectedTileIds.size !== 1) return alert(t('selectOneToDiscard')); await discardTile([...selectedTileIds][0]); setSelectedTileIds(new Set()); }}
+                                className="w-14 h-14 btn-premium btn-red border-2 border-red-400/30 flex flex-col items-center justify-center group shadow-xl"><span className="text-2xl group-hover:-translate-y-1 transition-transform">🗑️</span><span className="font-black text-[10px] mt-1 uppercase">{t('discardAction')}</span></button>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* Premium Slide-over Chat Panel */}
-            <div className={`fixed top-14 right-0 bottom-0 w-80 glass-hud z-40 border-l border-white/5 transition-transform duration-500 shadow-3xl flex flex-col ${showChat ? 'translate-x-0' : 'translate-x-full'}`}>
-                <div className="p-4 border-b border-white/5 bg-white/5 flex items-center justify-between">
-                    <h3 className="text-xs font-black uppercase tracking-widest">{t('chat')}</h3>
+            {/* Chat Overlay */}
+            <div className={`fixed top-14 right-0 bottom-0 w-80 glass-hud z-[200] border-l border-white/10 transition-transform duration-500 shadow-3xl flex flex-col ${showChat ? 'translate-x-0' : 'translate-x-full'}`}>
+                <div className="p-4 border-b border-white/10 bg-white/5 flex items-center justify-between">
+                    <h3 className="text-xs font-black uppercase tracking-widest">SOHBET</h3>
                     <button onClick={() => setShowChat(false)} className="opacity-40 hover:opacity-100 transition-opacity">✕</button>
                 </div>
-
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 no-scrollbar bg-black/20">
                     {chat.map((msg, idx) => (
                         <div key={idx} className={`flex flex-col ${msg.user === getUserInfo().name ? 'items-end' : 'items-start'}`}>
                             <span className="text-[8px] font-black opacity-30 uppercase mb-1">{msg.user}</span>
-                            <div className={`px-3 py-1.5 rounded-2xl text-[11px] max-w-[90%] break-words ${msg.user === getUserInfo().name ? 'bg-amber-500/20 border border-amber-500/20 text-amber-50' : 'bg-white/5 border border-white/10 text-white'}`}>
-                                {msg.text}
-                            </div>
+                            <div className={`px-3 py-1.5 rounded-2xl text-[11px] max-w-[90%] break-words ${msg.user === getUserInfo().name ? 'bg-amber-500/20 border-amber-500/20 text-amber-50' : 'bg-white/5 border-white/10 text-white'}`}>{msg.text}</div>
                         </div>
                     ))}
                     <div ref={chatEndRef} />
                 </div>
-
-                <form onSubmit={sendMessage} className="p-4 bg-black/40 border-t border-white/5 flex space-x-2">
-                    <input
-                        type="text"
-                        value={msgInput}
-                        onChange={(e) => setMsgInput(e.target.value)}
-                        placeholder={t('typeMessage')}
-                        className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs focus:outline-none focus:border-amber-500/50 transition-colors"
-                    />
-                    <button
-                        type="submit"
-                        className="w-10 h-10 flex items-center justify-center bg-amber-500 text-black rounded-xl hover:scale-105 active:scale-95 transition-all shadow-lg text-sm"
-                    >
-                        ➤
-                    </button>
+                <form onSubmit={sendMessage} className="p-4 bg-black/40 border-t border-white/10 flex space-x-2">
+                    <input type="text" value={msgInput} onChange={(e) => setMsgInput(e.target.value)} placeholder={t('typeMessage')} className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-xs focus:outline-none focus:border-amber-500/50 transition-colors" />
+                    <button type="submit" className="w-10 h-10 flex items-center justify-center bg-amber-500 text-black rounded-xl hover:scale-105 shadow-lg">➤</button>
                 </form>
             </div>
 
-            {/* Drag Ghost Overlay */}
-            {
-                draggingIdx !== null && (
-                    <div
-                        className="fixed pointer-events-none z-[9999] scale-110 shadow-3xl opacity-90"
-                        style={{
-                            left: dragStart.x + dragPos.x - 22,
-                            top: dragStart.y + dragPos.y - 32,
-                            width: 44,
-                            height: 64
-                        }}
-                    >
-                        {draggingIdx >= 0 && rackSlots[draggingIdx] ? (
-                            renderGameTile(rackSlots[draggingIdx]!)
-                        ) : draggingIdx === -100 ? (
+            {/* Ghost Overlay */}
+            {draggingIdx !== null && (
+                <div className="fixed pointer-events-none z-[9999] scale-110 shadow-3xl opacity-90"
+                    style={{ left: dragStart.x + dragPos.x - 22, top: dragStart.y + dragPos.y - 32, width: 44, height: 64 }}>
+                    {draggingIdx >= 0 && rackSlots[draggingIdx] ? renderGameTile(rackSlots[draggingIdx]!) :
+                        draggingIdx === -100 ? (
                             <div className="w-11 h-16 bg-white rounded-lg shadow-2xl flex items-center justify-center border-b-4 border-gray-300">
                                 <div className="w-6 h-6 rounded-full bg-blue-600/10"></div>
                             </div>
-                        ) : draggingIdx === -101 && lastDiscard ? (
-                            renderTile(lastDiscard)
-                        ) : null}
-                    </div>
-                )
-            }
+                        ) : (draggingIdx === -101 && lastDiscard) ? renderTile(lastDiscard) : null}
+                </div>
+            )}
+
             {renderFinishModal()}
             {isGameEnded && !showFinishModal && (
                 <div className="fixed bottom-48 left-1/2 -translate-x-1/2 z-[150] animate-in fade-in slide-in-from-bottom-4">
-                    <button
-                        onClick={() => setShowFinishModal(true)}
-                        className="btn-premium btn-amber px-12 py-4 text-sm tracking-[0.2em] font-black rounded-3xl shadow-2xl flex items-center space-x-3 group"
-                    >
-                        <span>{t('gameFinishedTitle').toUpperCase()} - SONUÇLARI GÖR</span>
-                        <span className="group-hover:translate-x-1 transition-transform">🏆</span>
+                    <button onClick={() => setShowFinishModal(true)} className="btn-premium btn-amber px-12 py-4 text-sm tracking-[0.2em] font-black rounded-3xl shadow-2xl flex items-center space-x-3 group">
+                        <span>{t('gameFinishedTitle').toUpperCase()} - SONUÇLARI GÖR</span><span className="group-hover:translate-x-1 transition-transform">🏆</span>
                     </button>
                 </div>
             )}
