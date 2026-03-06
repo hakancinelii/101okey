@@ -1100,14 +1100,14 @@ const GameBoard: React.FC = () => {
                 {/* Bottom HUD - Flanking player avatar (Moved to bottom edges to avoid overlapping open sets) */}
                 {/* Deck - Left Side */}
                 <div className="absolute bottom-4 left-[2%] sm:left-[5%] md:left-[10%] xl:left-[15%] z-40 pointer-events-auto">
-                    <div className="flex flex-col items-center bg-black/60 px-4 py-4 rounded-3xl border border-white/10 backdrop-blur-md shadow-2xl transform -rotate-2">
-                        <span className="text-[7px] uppercase font-black opacity-30 mb-1 tracking-widest text-white whitespace-nowrap">{t('deckLabel')}</span>
+                    <div className="flex flex-col items-center bg-black/60 px-6 py-5 rounded-3xl border border-white/10 backdrop-blur-md shadow-2xl transform -rotate-2">
+                        <span className="text-[9px] uppercase font-black opacity-30 mb-2 tracking-widest text-white whitespace-nowrap">{t('deckLabel')}</span>
                         <div className={`relative group ${hasDrawn || !isMyTurn ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
                             onClick={() => { if (!hasDrawn && isMyTurn) drawTile(); }}
                         >
-                            <div className="absolute -top-1 -left-1 w-8 h-12 bg-white/10 rounded-md -rotate-3 border border-black/20"></div>
-                            <div className={`w-8 h-12 bg-gradient-to-br from-white to-gray-200 rounded-md shadow-xl flex flex-col items-center justify-center -rotate-1 group-hover:rotate-0 transition-transform ${hasDrawn ? 'border-green-400' : 'border-gray-400'}`}>
-                                <span className="text-black font-black text-lg leading-none">{deckCount}</span>
+                            <div className="absolute -top-1 -left-1 w-14 h-20 bg-white/10 rounded-md -rotate-3 border border-black/20"></div>
+                            <div className={`w-14 h-20 bg-gradient-to-br from-white to-gray-200 rounded-md shadow-2xl flex flex-col items-center justify-center -rotate-1 group-hover:rotate-0 transition-transform ${hasDrawn ? 'border-green-400' : 'border-gray-400'} scale-110`}>
+                                <span className="text-black font-black text-3xl leading-none">{deckCount}</span>
                             </div>
                         </div>
                     </div>
@@ -1115,9 +1115,9 @@ const GameBoard: React.FC = () => {
 
                 {/* Okey Tile - Right Side */}
                 <div className="absolute bottom-4 right-[2%] sm:right-[5%] md:right-[10%] xl:right-[15%] z-40 pointer-events-auto flex gap-4 items-end">
-                    <div className="flex flex-col items-center glass-hud py-2 px-3 rounded-2xl border border-white/10 bg-black/60 shadow-2xl transform rotate-2">
-                        <span className="text-[7px] uppercase font-black opacity-30 mb-1 tracking-widest text-amber-500 whitespace-nowrap">{t('okeyTile')}</span>
-                        <div className="scale-75">{okeyTile && renderTile(okeyTile)}</div>
+                    <div className="flex flex-col items-center glass-hud py-3 px-4 rounded-2xl border border-white/10 bg-black/60 shadow-2xl transform rotate-2">
+                        <span className="text-[9px] uppercase font-black opacity-30 mb-2 tracking-widest text-amber-500 whitespace-nowrap">{t('okeyTile')}</span>
+                        <div className="scale-110">{okeyTile && renderTile(okeyTile)}</div>
                     </div>
                     {/* Stats Button */}
                     <div className="relative group pb-2">
