@@ -163,14 +163,16 @@ const GameBoard: React.FC = () => {
             if (state.okeyTile) setOkeyTile(state.okeyTile);
             if (state.turnIndex !== undefined) {
                 setTurnIndex(state.turnIndex);
-                setTimeRemaining(60);
+                if (state.remainingTime !== undefined) {
+                    setTimeRemaining(state.remainingTime);
+                } else if (turnIndex !== state.turnIndex) {
+                    setTimeRemaining(90);
+                }
             }
             if (state.members) {
                 const sortedMembers = [...state.members].sort((a: any, b: any) => a.seat - b.seat);
                 setMembers(sortedMembers);
             }
-            if (state.lastDiscard !== undefined) setLastDiscard(state.lastDiscard);
-
             if (state.lastDiscard !== undefined) setLastDiscard(state.lastDiscard);
 
             // Sync drawing and state flags from server if provided
@@ -207,6 +209,7 @@ const GameBoard: React.FC = () => {
             setDeckCount(data.deckCount);
             setOkeyTile(data.okeyTile);
             setTurnIndex(data.turnIndex);
+            setTimeRemaining(90);
             if (data.members) {
                 const sortedMembers = [...data.members].sort((a, b) => a.seat - b.seat);
                 setMembers(sortedMembers);
@@ -234,7 +237,7 @@ const GameBoard: React.FC = () => {
         // Turn updates — reset hasDrawn when turn changes
         socket.on('turnUpdate', (data: { turnIndex: number }) => {
             setTurnIndex(data.turnIndex);
-            setTimeRemaining(60);
+            setTimeRemaining(90);
             setHasDrawn(false);
             setLastDrawnTileId(null);
         });

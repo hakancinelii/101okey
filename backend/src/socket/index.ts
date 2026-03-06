@@ -536,7 +536,7 @@ export const initSocket = (httpServer: HttpServer) => {
                 if (startTime) {
                     const elapsed = Date.now() - startTime;
                     const config = (game.config as any) || {};
-                    const turnTimeout = (config.turnTime || 80) * 1000;
+                    const turnTimeout = (config.turnTime || 90) * 1000;
 
                     if (elapsed > turnTimeout) {
                         console.log(`[Supervisor] Timeout for game ${game.id}. Forcing move.`);
@@ -1140,6 +1140,10 @@ export const initSocket = (httpServer: HttpServer) => {
                     penaltyScore: m.penaltyScore || 0
                 }));
 
+                const startTime = turnStartTimes.get(gameId);
+                const turnTimeout = ((game.config as any)?.turnTime || 90) * 1000;
+                const remainingTime = startTime ? Math.max(0, turnTimeout - (Date.now() - startTime)) : turnTimeout;
+
                 socket.emit('gameState', {
                     hand: member.hand as any,
                     board: [],
@@ -1149,7 +1153,8 @@ export const initSocket = (httpServer: HttpServer) => {
                     lastDiscard: game.lastDiscard as any,
                     members: playerList,
                     hasDrawn: member.hasDrawn,
-                    mustOpen: member.mustOpen
+                    mustOpen: member.mustOpen,
+                    remainingTime: Math.floor(remainingTime / 1000)
                 });
 
                 callback?.();
