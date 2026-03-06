@@ -1338,10 +1338,21 @@ const GameBoard: React.FC = () => {
                 <div className="absolute -top-12 left-1/2 -translate-x-1/2 flex items-center space-x-4">
                     <div className="bg-black/60 px-4 py-1.5 rounded-full backdrop-blur-md border border-white/10 flex items-center space-x-4">
                         <div className="flex items-center space-x-1">
-                            <span className="text-[10px] font-black text-amber-500">101?</span>
-                            <span className={`text-xs font-black ${pendingSets.flat().reduce((acc, t) => acc + (t.isFakeJoker && okeyTile ? okeyTile.number : t.number), 0) >= 101 ? 'text-green-400' : 'text-white'}`}>
-                                {pendingSets.flat().reduce((acc, t) => acc + (t.isFakeJoker && okeyTile ? okeyTile.number : t.number), 0)}
-                            </span>
+                            {pendingSets.length >= 5 && pendingSets.every(s => s.length === 2) ? (
+                                <>
+                                    <span className="text-[10px] font-black text-blue-400">ÇİFT:</span>
+                                    <span className={`text-xs font-black ${pendingSets.length >= 5 ? 'text-green-400' : 'text-white'}`}>
+                                        {pendingSets.length}
+                                    </span>
+                                </>
+                            ) : (
+                                <>
+                                    <span className="text-[10px] font-black text-amber-500">101?</span>
+                                    <span className={`text-xs font-black ${pendingSets.flat().reduce((acc, t) => acc + (t.isFakeJoker && okeyTile ? okeyTile.number : t.number), 0) >= 101 ? 'text-green-400' : 'text-white'}`}>
+                                        {pendingSets.flat().reduce((acc, t) => acc + (t.isFakeJoker && okeyTile ? okeyTile.number : t.number), 0)}
+                                    </span>
+                                </>
+                            )}
                         </div>
                         <div className="w-[1px] h-3 bg-white/20"></div>
                         <span className={`text-[10px] font-black flex items-center ${isMyTurn ? 'text-green-400' : 'text-white/40'}`}>

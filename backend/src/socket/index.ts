@@ -1454,11 +1454,22 @@ export const initSocket = (httpServer: HttpServer) => {
                     }
 
                     // Convert IDs back to Tile objects for validation
-                    const setsOfTiles = setsOfIds.map(ids =>
-                        ids.map(id => currentHand.find((t: any) => t.id === id)) as Tile[]
-                    );
+                    const setsOfTiles: Tile[][] = [];
+                    for (const ids of setsOfIds) {
+                        const tileSet: Tile[] = [];
+                        for (const tid of ids) {
+                            const found = currentHand.find((t: any) => t.id === tid);
+                            if (!found) {
+                                console.log(`[PlaceSetsError] Tile ID ${tid} not found in Hand of user ${userId}`);
+                                return callback(`Bazı taşlar elinizde değil (ID: ${tid}). Lütfen sayfayı yenileyiniz.`);
+                            }
+                            tileSet.push(found);
+                        }
+                        setsOfTiles.push(tileSet);
+                    }
 
                     const result = calculateMultipleSetsScore(setsOfTiles, okeyTile);
+
                     if (!result.isValid) {
                         let errorMsg = 'Geçersiz set yapısı. Lütfen perlerinizi kontrol edin.';
                         if (result.reason === 'GROUP_DUPLICATE_COLORS') {

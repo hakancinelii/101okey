@@ -183,14 +183,19 @@ function getSequenceScore(tiles: any[]): { isValid: boolean, score: number } {
 
     return validateWrap();
 }
-function isPair(t1: Tile, t2: Tile, okeyTile: Tile): boolean {
-    const isActuallyOkey = (t: Tile) => t.isJoker || (t.color === okeyTile.color && t.number === okeyTile.number);
+function isActuallyOkey(t: Tile, okey: Tile): boolean {
+    if (t.isJoker) return true;
+    if (t.isFakeJoker) return true; // In our system, Fake Joker always plays as the Okey identity
+    return t.color === okey.color && t.number === okey.number;
+}
 
-    // Normalize fake jokers to the physical tile that became okey
+function isPair(t1: Tile, t2: Tile, okeyTile: Tile): boolean {
+    if (isActuallyOkey(t1, okeyTile) || isActuallyOkey(t2, okeyTile)) return true;
+
+    // Normalize fake jokers (redundant but safe)
     const n1 = t1.isFakeJoker ? { color: okeyTile.color, number: okeyTile.number } : t1;
     const n2 = t2.isFakeJoker ? { color: okeyTile.color, number: okeyTile.number } : t2;
 
-    if (isActuallyOkey(t1) || isActuallyOkey(t2)) return true;
     return n1.color === n2.color && n1.number === n2.number;
 }
 
@@ -198,12 +203,12 @@ export function calculateMultipleSetsScore(sets: Tile[][], okeyTile: Tile): { is
     // Check if it's a "Çift" (Pair) opening attempt
     const allArePairs = sets.length >= 5 && sets.every(s => s.length === 2);
     if (allArePairs) {
-        for (const s of sets) {
-            if (!isPair(s[0], s[1], okeyTile)) {
-                return { isValid: false, totalScore: 0, reason: 'INVALID_PAIR', isPairHand: true };
+        for (let i = 0; i < sets.length; i++) {
+            if (!isPair(sets[i][0], sets[i][1], okeyTile)) {
+                return { isValid: false, totalScore: 0, reason: `INVALID_PAIR_AT_${i + 1}`, isPairHand: true };
             }
         }
-        return { isValid: true, totalScore: 0, isPairHand: true }; // 0 score because pairs don't have sum rule
+        return { isValid: true, totalScore: 1, isPairHand: true }; // Use 1 to indicate "opened" but pairs don't have sum
     }
 
     // Normal Seri/Grup logic
