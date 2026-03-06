@@ -378,10 +378,17 @@ const GameBoard: React.FC = () => {
     };
 
     const placeSets = async (sets: Tile[][]) => {
-        if (!socketRef.current) return;
+        if (!socketRef.current || sets.length === 0) return;
+
+        // Optimistically clear pending sets to prevent double-submit synchronization errors
+        const previousPending = [...pendingSets];
+        setPendingSets([]);
+
         socketRef.current.emit('placeSets', sets.map(s => s.map(t => t.id)), (err?: string) => {
-            if (err) return alert(err);
-            setPendingSets([]);
+            if (err) {
+                setPendingSets(previousPending);
+                return alert(err);
+            }
         });
     };
 
@@ -1090,39 +1097,39 @@ const GameBoard: React.FC = () => {
                     <PlayerSpot player={getPlayerByRelativePos(3)} isTurn={turnIndex === (getPlayerByRelativePos(3)?.seat ?? -1)} relativePos={3} />
                 </div>
 
-                {/* Bottom HUD - Flanking player avatar */}
-                <div className="absolute bottom-20 left-1/2 -translate-x-1/2 w-full max-w-4xl flex items-end justify-center pointer-events-none z-40">
-                    <div className="relative w-full flex items-center justify-center gap-32 pb-4">
-                        <div className="pointer-events-auto">
-                            <div className="flex flex-col items-center glass-hud py-2 px-3 rounded-2xl border border-white/10 bg-black/60 shadow-2xl scale-90">
-                                <span className="text-[7px] uppercase font-black opacity-30 mb-1 tracking-widest text-amber-500 whitespace-nowrap">{t('okeyTile')}</span>
-                                <div className="scale-75">{okeyTile && renderTile(okeyTile)}</div>
+                {/* Bottom HUD - Flanking player avatar (Moved to bottom edges to avoid overlapping open sets) */}
+                {/* Deck - Left Side */}
+                <div className="absolute bottom-4 left-[2%] sm:left-[5%] md:left-[10%] xl:left-[15%] z-40 pointer-events-auto">
+                    <div className="flex flex-col items-center bg-black/60 px-4 py-4 rounded-3xl border border-white/10 backdrop-blur-md shadow-2xl transform -rotate-2">
+                        <span className="text-[7px] uppercase font-black opacity-30 mb-1 tracking-widest text-white whitespace-nowrap">{t('deckLabel')}</span>
+                        <div className={`relative group ${hasDrawn || !isMyTurn ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                            onClick={() => { if (!hasDrawn && isMyTurn) drawTile(); }}
+                        >
+                            <div className="absolute -top-1 -left-1 w-8 h-12 bg-white/10 rounded-md -rotate-3 border border-black/20"></div>
+                            <div className={`w-8 h-12 bg-gradient-to-br from-white to-gray-200 rounded-md shadow-xl flex flex-col items-center justify-center -rotate-1 group-hover:rotate-0 transition-transform ${hasDrawn ? 'border-green-400' : 'border-gray-400'}`}>
+                                <span className="text-black font-black text-lg leading-none">{deckCount}</span>
                             </div>
                         </div>
-                        <div className="pointer-events-auto">
-                            <div className="flex flex-col items-center bg-black/60 px-4 py-4 rounded-3xl border border-white/10 backdrop-blur-md shadow-2xl scale-95">
-                                <span className="text-[7px] uppercase font-black opacity-30 mb-1 tracking-widest text-white whitespace-nowrap">{t('deckLabel')}</span>
-                                <div className={`relative group ${hasDrawn || !isMyTurn ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
-                                    onClick={() => { if (!hasDrawn && isMyTurn) drawTile(); }}
-                                >
-                                    <div className="absolute -top-1 -left-1 w-8 h-12 bg-white/10 rounded-md -rotate-3 border border-black/20"></div>
-                                    <div className={`w-8 h-12 bg-gradient-to-br from-white to-gray-200 rounded-md shadow-xl flex flex-col items-center justify-center -rotate-1 group-hover:rotate-0 transition-transform ${hasDrawn ? 'border-green-400' : 'border-gray-400'}`}>
-                                        <span className="text-black font-black text-lg leading-none">{deckCount}</span>
+                    </div>
+                </div>
+
+                {/* Okey Tile - Right Side */}
+                <div className="absolute bottom-4 right-[2%] sm:right-[5%] md:right-[10%] xl:right-[15%] z-40 pointer-events-auto flex gap-4 items-end">
+                    <div className="flex flex-col items-center glass-hud py-2 px-3 rounded-2xl border border-white/10 bg-black/60 shadow-2xl transform rotate-2">
+                        <span className="text-[7px] uppercase font-black opacity-30 mb-1 tracking-widest text-amber-500 whitespace-nowrap">{t('okeyTile')}</span>
+                        <div className="scale-75">{okeyTile && renderTile(okeyTile)}</div>
+                    </div>
+                    {/* Stats Button */}
+                    <div className="relative group pb-2">
+                        <div className="w-10 h-10 bg-black/60 rounded-full border border-white/10 flex items-center justify-center hover:w-32 hover:rounded-xl transition-all overflow-hidden cursor-help shadow-2xl">
+                            <span className="text-sm shrink-0">📊</span>
+                            <div className="hidden group-hover:flex flex-col ml-2 pr-2">
+                                {members.slice(0, 4).map(m => (
+                                    <div key={m.userId} className="flex justify-between w-20 text-[8px] font-black uppercase">
+                                        <span className="truncate mr-1">{m.name}</span>
+                                        <span className="text-amber-400">{m.penaltyScore || 0}</span>
                                     </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="absolute bottom-4 -right-12 pointer-events-auto group">
-                            <div className="w-10 h-10 bg-black/60 rounded-full border border-white/10 flex items-center justify-center hover:w-32 hover:rounded-xl transition-all overflow-hidden cursor-help shadow-2xl">
-                                <span className="text-sm shrink-0">📊</span>
-                                <div className="hidden group-hover:flex flex-col ml-2 pr-2">
-                                    {members.slice(0, 4).map(m => (
-                                        <div key={m.userId} className="flex justify-between w-20 text-[8px] font-black uppercase">
-                                            <span className="truncate mr-1">{m.name}</span>
-                                            <span className="text-amber-400">{m.penaltyScore || 0}</span>
-                                        </div>
-                                    ))}
-                                </div>
+                                ))}
                             </div>
                         </div>
                     </div>
