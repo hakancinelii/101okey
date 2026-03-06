@@ -171,7 +171,14 @@ async function updateGameCache(gameId: string) {
  */
 export const initSocket = (httpServer: HttpServer) => {
     const io = new SocketIOServer(httpServer, {
-        cors: { origin: '*', methods: ['GET', 'POST'], credentials: true },
+        cors: {
+            origin: (origin, callback) => {
+                // Allow all origins to mirror our Express CORS logic
+                callback(null, true);
+            },
+            methods: ['GET', 'POST'],
+            credentials: true
+        },
     });
 
     async function handleGameFinish(gameId: string, reason: string, winnerId?: string) {
