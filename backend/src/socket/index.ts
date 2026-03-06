@@ -267,6 +267,7 @@ export const initSocket = (httpServer: HttpServer) => {
                 let pool = (game.tilePool as any) || [];
                 let currentHand = (currentMember.hand as any) || [];
                 let hasDrawn = currentMember.hasDrawn;
+                let penaltyScore = currentMember.penaltyScore || 0;
 
                 if (!hasDrawn) {
                     if (pool.length > 0) {
@@ -277,6 +278,9 @@ export const initSocket = (httpServer: HttpServer) => {
                         await handleGameFinish(gameId, 'DEST_BITTI');
                         return;
                     }
+                } else if (currentMember.mustOpen) {
+                    // Timeout while holding a tile from the discard pile without opening
+                    penaltyScore += 101;
                 }
 
                 // AI-like discard for force move: discard the last tile (usually toughest to fit)
@@ -294,7 +298,7 @@ export const initSocket = (httpServer: HttpServer) => {
                     }),
                     prisma.gameMember.update({
                         where: { id: currentMember.id },
-                        data: { hand: currentHand, hasDrawn: false, mustOpen: false } as any
+                        data: { hand: currentHand, hasDrawn: false, mustOpen: false, penaltyScore } as any
                     }),
                     prisma.gameMember.update({
                         where: { id: nextMember.id },

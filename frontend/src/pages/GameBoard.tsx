@@ -63,6 +63,7 @@ const GameBoard: React.FC = () => {
     const [mustOpen, setMustOpen] = useState(false);
     const [hasDrawn, setHasDrawn] = useState(false);
     const [lastDrawnTileId, setLastDrawnTileId] = useState<string | null>(null);
+    const [drawnFromDiscardTileId, setDrawnFromDiscardTileId] = useState<string | null>(null);
     const [discardHistory, setDiscardHistory] = useState<{ tile: Tile; userId: string }[]>([]);
     const [showFinishModal, setShowFinishModal] = useState(false);
     const [finishData, setFinishData] = useState<{ reason: string, members: Member[], currentRound?: number, maxRounds?: number, isFinal?: boolean } | null>(null);
@@ -333,6 +334,15 @@ const GameBoard: React.FC = () => {
 
     const discardTile = async (tileId: string) => {
         if (!socketRef.current) return;
+
+        if (mustOpen) {
+            const confirmed = window.confirm("Yan taş aldığınız için elinizi açmak zorundasınız. Eğer açamıyorsanız, taşı geri verip (101 ceza yiyerek) desteden yeni taş çekmelisiniz. Yandan aldığınız taşı geri vermek istiyor musunuz?");
+            if (confirmed) {
+                undoDrawDiscard();
+            }
+            return;
+        }
+
         socketRef.current.emit('discardTile', tileId, (err?: string) => {
             if (err) return alert(err);
             setHand((prev) => prev.filter((t) => t.id !== tileId));
@@ -357,23 +367,25 @@ const GameBoard: React.FC = () => {
                 });
                 setLastDiscard(null);
                 setMustOpen(true);
+                setDrawnFromDiscardTileId(tile.id);
             }
         });
     };
 
     const undoDrawDiscard = async () => {
-        if (!socketRef.current || !mustOpen) return;
-        // In this simple logic, the last tile in hand is the one we picked
-        const lastPickedTile = hand[hand.length - 1];
-        if (!lastPickedTile) return;
+        if (!socketRef.current || !mustOpen || !drawnFromDiscardTileId) return;
 
-        socketRef.current.emit('undoDrawDiscard', lastPickedTile.id, (err?: string) => {
+        socketRef.current.emit('undoDrawDiscard', drawnFromDiscardTileId, (err?: string) => {
             if (err) return alert(err);
-            setHand(prev => prev.filter(t => t.id !== lastPickedTile.id));
-            setRackSlots(prev => prev.map(s => s?.id === lastPickedTile.id ? null : s));
-            setLastDiscard(lastPickedTile);
+
+            // Revert state
+            setHand(prev => prev.filter(t => t.id !== drawnFromDiscardTileId));
+            setRackSlots(prev => prev.map(s => s?.id === drawnFromDiscardTileId ? null : s));
+
+            // We just clear mustOpen, but the tile is officially gone on backend. We don't restore it perfectly locally, 
+            // since backend pool gets it, user will just have to draw from deck next.
             setMustOpen(false);
-            // Optionally update local penalty score (server will update anyway via events/state)
+            setDrawnFromDiscardTileId(null);
         });
     };
 
