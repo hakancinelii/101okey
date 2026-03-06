@@ -174,29 +174,41 @@ export const initSocket = (httpServer: HttpServer) => {
         cors: { origin: '*', methods: ['GET', 'POST'], credentials: true },
     });
 
-    async function handleGameFinish(gameId: string, reason: string) {
+    async function handleGameFinish(gameId: string, reason: string, winnerId?: string) {
         if (gameFinishLock.get(gameId)) return;
         gameFinishLock.set(gameId, true);
         try {
             const game = await prisma.game.findUnique({
                 where: { id: gameId },
                 include: { members: true }
-            });
+            }) as any;
+
             if (!game || game.status === 'FINISHED' || game.status === 'PENDING') {
                 gameFinishLock.delete(gameId);
                 return;
             }
+
             const isFinalRound = game.currentRound >= game.maxRounds;
             const okeyTile = game.okeyTile as any;
+            const isOkeyFinish = reason === 'OKEY_BITTI';
             const updates = [];
+
             for (const m of game.members) {
-                const hand = (m.hand as any) || [];
-                const penalty = calculateHandPenalty(hand, okeyTile, m.openScore > 0);
+                let penalty = 0;
+                if (m.userId === winnerId) {
+                    penalty = 0; // Finisher gets 0 in 101? (Optional: -101 if standard rule)
+                } else {
+                    const hand = (m.hand as any) || [];
+                    penalty = calculateHandPenalty(hand, okeyTile, m.openScore > 0);
+                    if (isOkeyFinish) penalty *= 2; // Double penalty for Okey finish
+                }
+
                 updates.push(prisma.gameMember.update({
                     where: { id: m.id },
                     data: { penaltyScore: penalty, totalPenaltyScore: { increment: penalty } }
                 }));
             }
+
             await prisma.$transaction([
                 prisma.game.update({
                     where: { id: gameId },
@@ -204,10 +216,12 @@ export const initSocket = (httpServer: HttpServer) => {
                 }),
                 ...updates
             ]);
+
             const updatedMembers = await prisma.gameMember.findMany({
                 where: { gameId },
                 include: { user: true }
             });
+
             io.to(gameId).emit('gameFinished', {
                 reason,
                 currentRound: game.currentRound,
@@ -221,7 +235,7 @@ export const initSocket = (httpServer: HttpServer) => {
                     openScore: um.openScore
                 }))
             });
-            // Also update cache as finished
+
             await updateGameCache(gameId);
         } catch (e) {
             console.error('Error in handleGameFinish:', e);
@@ -329,52 +343,124 @@ export const initSocket = (httpServer: HttpServer) => {
                 currentHand.push(drawnTile);
                 const okeyTile = game.okeyTile as any;
 
-                // Bot Brain: Try to find and place sets
+                // Bot Brain: Try to find and place sets (Greedy)
                 const setsFound: Tile[][] = [];
-                // Simple greedy bot: group same numbers
+                const jokerNumber = (okeyTile.number % 13) + 1;
+
+                // 1. Group same numbers
                 const byNum: { [k: number]: Tile[] } = {};
                 currentHand.forEach((t: Tile) => {
-                    if (t.isJoker) return; // skip okey for now
+                    const isOkey = (t.color === okeyTile.color && t.number === jokerNumber) || t.isJoker;
+                    if (isOkey) return; // skip okey for grouping
                     if (!byNum[t.number]) byNum[t.number] = [];
                     byNum[t.number].push(t);
                 });
-
                 Object.values(byNum).forEach(grp => {
                     if (grp.length >= 3) {
                         const uniqueColors = new Set(grp.map(t => t.color));
-                        if (uniqueColors.size === grp.length) {
-                            setsFound.push(grp);
-                        }
+                        if (uniqueColors.size === grp.length) setsFound.push(grp);
                     }
                 });
 
+                // 2. Simple Sequence Finder
+                const byColor: { [k: string]: Tile[] } = {};
+                currentHand.forEach((t: Tile) => {
+                    const isOkey = (t.color === okeyTile.color && t.number === jokerNumber) || t.isJoker;
+                    if (isOkey) return;
+                    if (!byColor[t.color]) byColor[t.color] = [];
+                    byColor[t.color].push(t);
+                });
+                Object.values(byColor).forEach(tiles => {
+                    const sorted = [...tiles].sort((a, b) => a.number - b.number);
+                    let currentSeq: Tile[] = [];
+                    for (let i = 0; i < sorted.length; i++) {
+                        if (currentSeq.length === 0) currentSeq.push(sorted[i]);
+                        else if (sorted[i].number === sorted[i - 1].number + 1) currentSeq.push(sorted[i]);
+                        else {
+                            if (currentSeq.length >= 3) setsFound.push([...currentSeq]);
+                            currentSeq = [sorted[i]];
+                        }
+                    }
+                    if (currentSeq.length >= 3) setsFound.push(currentSeq);
+                });
+
                 // If bot hasn't opened, check 101 rule
-                const score = setsFound.reduce((acc, s) => acc + calculateSetScore(s, okeyTile).score, 0);
-                const canOpen = (currentMember.openScore || 0) > 0 || score >= 101;
+                const newSetsScore = setsFound.reduce((acc, s) => acc + calculateSetScore(s, okeyTile).score, 0);
+                const hasAlreadyOpened = (currentMember.openScore || 0) > 0;
+                const canOpenNow = newSetsScore >= 101;
 
-                if (canOpen && setsFound.length > 0) {
-                    const allPlacedIds = new Set(setsFound.flat().map(t => t.id));
-                    const newHand = currentHand.filter((t: Tile) => !allPlacedIds.has(t.id));
-                    const existingSets = (currentMember.openSets as any) || [];
+                if (hasAlreadyOpened || canOpenNow) {
+                    const alreadyUsedIds = new Set();
+                    const validSetsToPlace = [];
+                    let totalPlacingScore = 0;
 
-                    await prisma.gameMember.update({
-                        where: { id: currentMember.id },
-                        data: {
-                            hand: newHand,
-                            openSets: [...existingSets, ...setsFound] as any,
-                            openScore: { increment: score }
-                        } as any
-                    });
+                    for (const s of setsFound) {
+                        if (s.every(t => !alreadyUsedIds.has(t.id))) {
+                            validSetsToPlace.push(s);
+                            s.forEach(t => alreadyUsedIds.add(t.id));
+                            totalPlacingScore += calculateSetScore(s, okeyTile).score;
+                        }
+                    }
 
-                    io.to(gameId).emit('setPlaced', {
-                        userId: currentMember.userId,
-                        tiles: setsFound.flat(), // Simplified emit for now
-                        score: score
-                    });
+                    if (validSetsToPlace.length > 0) {
+                        const allPlacedIds = new Set(validSetsToPlace.flat().map(t => t.id));
+                        const remainingHand = currentHand.filter((t: Tile) => !allPlacedIds.has(t.id));
+                        const existingSets = (currentMember.openSets as any) || [];
 
-                    // Update local hand for discard
-                    currentHand.length = 0;
-                    currentHand.push(...newHand);
+                        await prisma.gameMember.update({
+                            where: { id: currentMember.id },
+                            data: {
+                                hand: remainingHand,
+                                openSets: [...existingSets, ...validSetsToPlace] as any,
+                                openScore: { increment: totalPlacingScore }
+                            } as any
+                        });
+
+                        io.to(gameId).emit('setPlaced', {
+                            userId: currentMember.userId,
+                            tiles: validSetsToPlace.flat(),
+                            score: totalPlacingScore
+                        });
+
+                        currentHand.length = 0;
+                        currentHand.push(...remainingHand);
+                    }
+                }
+
+                // Bot Stoning (Taş İşleme): Add stones to ANY player's sets if bot has opened
+                if ((currentMember.openScore || 0) > 0 || newSetsScore >= 101) {
+                    for (const target of game.members) {
+                        if (!target.openSets || (target.openSets as any[]).length === 0) continue;
+                        const tSets = [...(target.openSets as any[])];
+                        let setsModified = false;
+
+                        for (let sIdx = 0; sIdx < tSets.length; sIdx++) {
+                            for (let hIdx = currentHand.length - 1; hIdx >= 0; hIdx--) {
+                                const tile = currentHand[hIdx];
+                                const isOkey = (tile.color === okeyTile.color && tile.number === jokerNumber) || tile.isJoker;
+                                if (isOkey) continue;
+
+                                const validation = canAddTileToSet(tSets[sIdx], tile, okeyTile);
+                                if (validation.isValid) {
+                                    tSets[sIdx] = validation.newSet;
+                                    currentHand.splice(hIdx, 1);
+                                    setsModified = true;
+                                    io.to(gameId).emit('tileAddedToSet', {
+                                        userId: currentMember.userId,
+                                        targetUserId: target.userId,
+                                        setIndex: sIdx,
+                                        tile: tile
+                                    });
+                                }
+                            }
+                        }
+                        if (setsModified) {
+                            await prisma.gameMember.update({
+                                where: { id: target.id },
+                                data: { openSets: tSets as any } as any
+                            });
+                        }
+                    }
                 }
 
                 // Bot Discard
@@ -386,6 +472,20 @@ export const initSocket = (httpServer: HttpServer) => {
                 }
                 const discardedTile = currentHand[discardIndex];
                 currentHand.splice(discardIndex, 1);
+
+                if (currentHand.length === 0) {
+                    const jokerNumber = (okeyTile.number % 13) + 1;
+                    const isOkeyFinish = (discardedTile.color === okeyTile.color && discardedTile.number === jokerNumber) || discardedTile.isJoker;
+
+                    await prisma.gameMember.update({
+                        where: { id: currentMember.id },
+                        data: { hand: [], hasDrawn: false, mustOpen: false } as any
+                    });
+                    io.to(gameId).emit('tileDiscarded', { userId: currentMember.userId, tile: discardedTile });
+                    await handleGameFinish(gameId, isOkeyFinish ? 'OKEY_BITTI' : 'NORMAL_BITTI', currentMember.userId);
+                    botProcessingLock.delete(gameId);
+                    return;
+                }
 
                 // Next turn
                 const currIdx = members.findIndex(m => m.seat === game.turnIndex);
@@ -1151,6 +1251,21 @@ export const initSocket = (httpServer: HttpServer) => {
                     const discardedTile = currentHand.find((t: any) => t.id === tileId);
                     if (!discardedTile) return callback?.('Taş elinizde bulunamadı');
                     const updatedHand = currentHand.filter((t: any) => t.id !== tileId);
+
+                    if (updatedHand.length === 0) {
+                        const okeyTile = game.okeyTile as any;
+                        const jokerNumber = (okeyTile.number % 13) + 1;
+                        const isOkeyFinish = (discardedTile.color === okeyTile.color && discardedTile.number === jokerNumber) || discardedTile.isJoker;
+
+                        await prisma.gameMember.update({
+                            where: { id: member.id },
+                            data: { hand: [], hasDrawn: false, mustOpen: false } as any
+                        });
+                        io.to(activeGameId).emit('tileDiscarded', { userId, tile: discardedTile });
+
+                        await handleGameFinish(activeGameId, isOkeyFinish ? 'OKEY_BITTI' : 'NORMAL_BITTI', userId);
+                        return callback?.();
+                    }
 
                     // Robust next turn calculation
                     const currIdx = game.members.findIndex((m: any) => m.seat === game.turnIndex);

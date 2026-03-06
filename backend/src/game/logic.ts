@@ -101,16 +101,12 @@ function isValidGroup(tiles: any[]): { isValid: boolean, reason?: string } {
 function getSequenceScore(tiles: any[]): { isValid: boolean, score: number } {
     if (tiles.length < 3) return { isValid: false, score: 0 };
     const nonWildcards = tiles.filter(t => !t.isWildcard);
-    if (nonWildcards.length === 0) {
-        // All wildcards - not normally possible in 101, but for completeness:
-        return { isValid: true, score: 0 }; // We can't infer values without at least one concrete tile
-    }
+    if (nonWildcards.length === 0) return { isValid: true, score: 0 };
 
-    // All must be same color
     const color = nonWildcards[0].color;
     if (!nonWildcards.every(t => t.color === color)) return { isValid: false, score: 0 };
 
-    // Sort non-wildcards
+    // Standard sort
     const sorted = [...nonWildcards].sort((a, b) => a.number - b.number);
 
     // Check for duplicates
@@ -118,65 +114,76 @@ function getSequenceScore(tiles: any[]): { isValid: boolean, score: number } {
         if (sorted[i].number === sorted[i + 1].number) return { isValid: false, score: 0 };
     }
 
-    // Check gaps
-    let gaps = 0;
-    for (let i = 0; i < sorted.length - 1; i++) {
-        gaps += (sorted[i + 1].number - sorted[i].number - 1);
-    }
-
     const wildcardCount = tiles.length - nonWildcards.length;
-    if (wildcardCount < gaps) return { isValid: false, score: 0 };
 
-    // We have enough wildcards. Now calculate total score.
-    // In sequence, characters are consecutive. 
-    // We need to find the the 'start' number of the sequence.
-    // The sequence could have wildcards at the start and end.
-
-    // Simplest way: The gap logic tells us the wildcards MUST fit between the concrete tiles.
-    // Any remaining wildcards can go at either end. 
-    // In 101 Okey, we usually calculate score based on the values the wildcards TAKE.
-
-    // To find the range:
-    const minNum = sorted[0].number;
-    const maxNum = sorted[sorted.length - 1].number;
-
-    // The range covered by concrete tiles is [minNum, maxNum] with total maxNum - minNum + 1 slots.
-    // Number of concrete tiles is sorted.length.
-    // Missing slots = (maxNum - minNum + 1) - sorted.length = gaps. (This is already checked).
-
-    // Remaining wildcards:
-    let extraWildcards = wildcardCount - gaps;
-
-    // Where do extra wildcards go? Standard 101 usually expects they replace specific tiles.
-    // However, if the user sends 4 tiles [10, 11, 12, Joker], the Joker is 13.
-    // If [Joker, 10, 11, 12], the Joker is 9.
-
-    // IN FRONTEND, the user usually arranges them. But here we just have an array.
-    // Let's assume the wildcards are placed to extend the sequence.
-    // If gaps are filled, we have a solid block of maxNum - minNum + 1 tiles.
-    // The score for this block is sum of numbers from minNum to maxNum.
-    let currentScore = 0;
-    for (let j = minNum; j <= maxNum; j++) currentScore += j;
-
-    // For extra wildcards, we add them at the end (or start if end hits 13).
-    let high = maxNum;
-    let low = minNum;
-
-    while (extraWildcards > 0) {
-        if (high < 13) {
-            high++;
-            currentScore += high;
-        } else if (low > 1) {
-            low--;
-            currentScore += low;
-        } else {
-            // Can't extend anymore? Invalid sequence
-            return { isValid: false, score: 0 };
+    // Try normal (no wrap)
+    const validateNoWrap = () => {
+        let gaps = 0;
+        for (let i = 0; i < sorted.length - 1; i++) {
+            gaps += (sorted[i + 1].number - sorted[i].number - 1);
         }
-        extraWildcards--;
-    }
+        if (wildcardCount < gaps) return { isValid: false, score: 0 };
 
-    return { isValid: true, score: currentScore };
+        let extra = wildcardCount - gaps;
+        let low = sorted[0].number;
+        let high = sorted[sorted.length - 1].number;
+        let score = 0;
+        for (let i = low; i <= high; i++) score += i;
+
+        while (extra > 0) {
+            if (high < 13) { high++; score += high; }
+            else if (low > 1) { low--; score += low; }
+            else return { isValid: false, score: 0 };
+            extra--;
+        }
+        return { isValid: true, score };
+    };
+
+    // Try wrap-around (Dönüşlü: 12-13-1)
+    const validateWrap = () => {
+        const hasOne = sorted.some(t => t.number === 1);
+        const hasHigh = sorted.some(t => t.number === 12 || t.number === 13);
+        if (!hasOne || !hasHigh) return { isValid: false, score: 0 };
+
+        // In 101 Okey, "1" in a wrap sequence always counts as the tile AFTER 13.
+        // So for calculation, treat it as 14.
+        const wrapSorted = sorted.map(t => t.number === 1 ? { ...t, number: 14 } : t).sort((a, b) => a.number - b.number);
+
+        let gaps = 0;
+        for (let i = 0; i < wrapSorted.length - 1; i++) {
+            gaps += (wrapSorted[i + 1].number - wrapSorted[i].number - 1);
+        }
+        if (wildcardCount < gaps) return { isValid: false, score: 0 };
+
+        let extra = wildcardCount - gaps;
+        let low = wrapSorted[0].number;
+        let high = wrapSorted[wrapSorted.length - 1].number;
+
+        // Wrap sequence can't start below 1 (effectively 1 after 13)
+        // Wait, 11-12-13-1 is valid. 12-13-1 is valid.
+        // 13-1-2 is usually NOT valid.
+        // So low must be at least 1 (if 1 is start) or something leading to 13.
+        // In our wrapSorted, 1 is 14. So a sequence like 12, 13, 14 is fine.
+        // But 14, 15... doesn't exist.
+
+        let score = 0;
+        // Treat 14 as 1 for score? Standard 101 rules: 1 after 13 counts as 1.
+        for (let i = low; i <= high; i++) score += (i === 14 ? 1 : i);
+
+        while (extra > 0) {
+            // In wrap, we can only extend downwards (e.g. 11, 12, 13, 1)
+            // Extending upwards from 1 (14) is illegal.
+            if (low > 1) { low--; score += low; }
+            else return { isValid: false, score: 0 };
+            extra--;
+        }
+        return { isValid: true, score };
+    };
+
+    const resNormal = validateNoWrap();
+    if (resNormal.isValid) return resNormal;
+
+    return validateWrap();
 }
 export function calculateMultipleSetsScore(sets: Tile[][], okeyTile: Tile): { isValid: boolean, totalScore: number, reason?: string } {
     let totalScore = 0;
