@@ -285,7 +285,7 @@ export const initSocket = (httpServer: HttpServer) => {
                 io.to(gameId).emit('poolUpdate', { deckCount: pool.length });
                 io.to(gameId).emit('tileDiscarded', { userId: currentMember.userId, tile: discardedTile });
                 io.to(gameId).emit('turnUpdate', { turnIndex: nextTurn });
-
+                console.log(`[ForceMove] Game ${gameId}: Seat ${currentMember.seat} -> ${nextTurn}. Discarded: ${discardedTile?.color}${discardedTile?.number}`);
                 turnStartTimes.set(gameId, Date.now());
                 setTimeout(() => checkAndProcessBotTurn(gameId), 3000);
             } catch (e) {
@@ -927,7 +927,7 @@ export const initSocket = (httpServer: HttpServer) => {
             });
 
             // If first player is bot, trigger bot logic
-            const firstMember = members.find(m => m.seat === 0);
+            const firstMember = members.find(m => m.seat === firstSeat);
             if (firstMember?.isBot) {
                 setTimeout(() => checkAndProcessBotTurn(gameId), 4000);
             }

@@ -167,7 +167,10 @@ const GameBoard: React.FC = () => {
                 setTurnIndex(state.turnIndex);
                 setTimeRemaining(60);
             }
-            if (state.members) setMembers(state.members);
+            if (state.members) {
+                const sortedMembers = [...state.members].sort((a: any, b: any) => a.seat - b.seat);
+                setMembers(sortedMembers);
+            }
             if (state.lastDiscard !== undefined) setLastDiscard(state.lastDiscard);
 
             if (state.lastDiscard !== undefined) setLastDiscard(state.lastDiscard);
@@ -204,7 +207,10 @@ const GameBoard: React.FC = () => {
             setDeckCount(data.deckCount);
             setOkeyTile(data.okeyTile);
             setTurnIndex(data.turnIndex);
-            if (data.members) setMembers(data.members);
+            if (data.members) {
+                const sortedMembers = [...data.members].sort((a, b) => a.seat - b.seat);
+                setMembers(sortedMembers);
+            }
             if (data.currentRound) setCurrentRound(data.currentRound);
             if (data.maxRounds) setMaxRounds(data.maxRounds);
 
@@ -1136,13 +1142,13 @@ const GameBoard: React.FC = () => {
                             <span className="text-[10px] opacity-40">📊</span>
                         </div>
                         <div className="p-1 space-y-1 overflow-y-auto no-scrollbar">
-                            {members.map((m, idx) => (
-                                <div key={idx} className={`flex items-center justify-between px-2 py-1.5 rounded-xl transition-all ${turnIndex === idx ? 'bg-amber-500/20 border border-amber-500/30' : 'bg-black/20 border border-transparent'}`}>
+                            {members.map((m) => (
+                                <div key={m.userId} className={`flex items-center justify-between px-2 py-1.5 rounded-xl transition-all ${turnIndex === m.seat ? 'bg-amber-500/20 border border-amber-500/30' : 'bg-black/20 border border-transparent'}`}>
                                     <div className="flex items-center space-x-2 truncate">
-                                        <div className={`w-1.5 h-1.5 rounded-full ${turnIndex === idx ? 'bg-amber-400 animate-pulse' : 'bg-white/10'}`}></div>
+                                        <div className={`w-1.5 h-1.5 rounded-full ${turnIndex === m.seat ? 'bg-amber-400 animate-pulse' : 'bg-white/10'}`}></div>
                                         <span className="text-[10px] font-bold truncate opacity-80">{m.name}</span>
                                     </div>
-                                    <span className={`text-[11px] font-black ${turnIndex === idx ? 'text-amber-400' : 'text-white'}`}>{m.openScore || 0}</span>
+                                    <span className={`text-[11px] font-black ${turnIndex === m.seat ? 'text-amber-400' : 'text-white'}`}>{m.openScore || 0}</span>
                                 </div>
                             ))}
                         </div>

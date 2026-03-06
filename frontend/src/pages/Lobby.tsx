@@ -109,7 +109,7 @@ const Lobby: React.FC = () => {
                     okeyTile: data.okeyTile,
                     deckCount: data.deckCount,
                     turnIndex: data.turnIndex,
-                    members: data.members
+                    members: Array.isArray(data.members) ? [...data.members].sort((a, b) => a.seat - b.seat) : []
                 }
             });
         });
