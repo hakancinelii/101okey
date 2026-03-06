@@ -166,7 +166,7 @@ const GameBoard: React.FC = () => {
                 if (state.remainingTime !== undefined) {
                     setTimeRemaining(state.remainingTime);
                 } else if (turnIndex !== state.turnIndex) {
-                    setTimeRemaining(90);
+                    setTimeRemaining(120);
                 }
             }
             if (state.members) {
@@ -209,7 +209,7 @@ const GameBoard: React.FC = () => {
             setDeckCount(data.deckCount);
             setOkeyTile(data.okeyTile);
             setTurnIndex(data.turnIndex);
-            setTimeRemaining(90);
+            setTimeRemaining(120);
             if (data.members) {
                 const sortedMembers = [...data.members].sort((a, b) => a.seat - b.seat);
                 setMembers(sortedMembers);
@@ -237,7 +237,7 @@ const GameBoard: React.FC = () => {
         // Turn updates — reset hasDrawn when turn changes
         socket.on('turnUpdate', (data: { turnIndex: number }) => {
             setTurnIndex(data.turnIndex);
-            setTimeRemaining(90);
+            setTimeRemaining(120);
             setHasDrawn(false);
             setLastDrawnTileId(null);
         });

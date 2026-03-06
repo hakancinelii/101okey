@@ -543,7 +543,7 @@ export const initSocket = (httpServer: HttpServer) => {
                 if (startTime) {
                     const elapsed = Date.now() - startTime;
                     const config = (game.config as any) || {};
-                    const turnTimeout = (config.turnTime || 90) * 1000;
+                    const turnTimeout = (config.turnTime || 120) * 1000;
 
                     if (elapsed > turnTimeout) {
                         console.log(`[Supervisor] Timeout for game ${game.id}. Forcing move.`);
@@ -1148,7 +1148,7 @@ export const initSocket = (httpServer: HttpServer) => {
                 }));
 
                 const startTime = turnStartTimes.get(gameId);
-                const turnTimeout = ((game.config as any)?.turnTime || 90) * 1000;
+                const turnTimeout = ((game.config as any)?.turnTime || 120) * 1000;
                 const remainingTime = startTime ? Math.max(0, turnTimeout - (Date.now() - startTime)) : turnTimeout;
 
                 socket.emit('gameState', {
@@ -1474,9 +1474,13 @@ export const initSocket = (httpServer: HttpServer) => {
                     const currentOpenScore = (member as any).openScore || 0;
                     const newTotalScore = result.totalScore;
 
-                    // 101 Rule: Must reach 101 to open first time
-                    if (currentOpenScore === 0 && newTotalScore < 101) {
-                        return callback(`Toplam puanınız (${newTotalScore}) henüz 101 barajına ulaşmadı. Seri veya gruplarınızı büyütmelisiniz.`);
+                    // 101 Rule: Must reach 101 to open first time, unless it's a Pair (Çift) hand
+                    if (currentOpenScore === 0 && newTotalScore < 101 && !result.isPairHand) {
+                        return callback(`Toplam puanınız (${newTotalScore}) henüz 101 barajına ulaşmadı. Seri veya gruplarınızı büyütmelisiniz. (Alternatif: En az 5 çift dizerek de açabilirsiniz).`);
+                    }
+
+                    if (result.isPairHand && setsOfTiles.length < 5) {
+                        return callback('Çift ile açmak için en az 5 çiftiniz olmalıdır.');
                     }
 
                     const updatedHand = currentHand.filter((t: any) => !allTileIds.includes(t.id));

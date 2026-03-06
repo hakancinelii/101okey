@@ -185,7 +185,31 @@ function getSequenceScore(tiles: any[]): { isValid: boolean, score: number } {
 
     return validateWrap();
 }
-export function calculateMultipleSetsScore(sets: Tile[][], okeyTile: Tile): { isValid: boolean, totalScore: number, reason?: string } {
+function isPair(t1: Tile, t2: Tile, okeyTile: Tile): boolean {
+    const jokerNumber = (okeyTile.number % 13) + 1;
+    const isActuallyOkey = (t: Tile) => t.isJoker || (t.color === okeyTile.color && t.number === jokerNumber);
+
+    // Normalize fake jokers to the physical tile that became okey
+    const n1 = t1.isFakeJoker ? { color: okeyTile.color, number: jokerNumber } : t1;
+    const n2 = t2.isFakeJoker ? { color: okeyTile.color, number: jokerNumber } : t2;
+
+    if (isActuallyOkey(t1) || isActuallyOkey(t2)) return true;
+    return n1.color === n2.color && n1.number === n2.number;
+}
+
+export function calculateMultipleSetsScore(sets: Tile[][], okeyTile: Tile): { isValid: boolean, totalScore: number, reason?: string, isPairHand?: boolean } {
+    // Check if it's a "Çift" (Pair) opening attempt
+    const allArePairs = sets.length >= 5 && sets.every(s => s.length === 2);
+    if (allArePairs) {
+        for (const s of sets) {
+            if (!isPair(s[0], s[1], okeyTile)) {
+                return { isValid: false, totalScore: 0, reason: 'INVALID_PAIR', isPairHand: true };
+            }
+        }
+        return { isValid: true, totalScore: 0, isPairHand: true }; // 0 score because pairs don't have sum rule
+    }
+
+    // Normal Seri/Grup logic
     let totalScore = 0;
     for (const set of sets) {
         const res = calculateSetScore(set, okeyTile);
@@ -194,6 +218,7 @@ export function calculateMultipleSetsScore(sets: Tile[][], okeyTile: Tile): { is
     }
     return { isValid: true, totalScore };
 }
+
 
 /**
  * Calculates penalty score for a player's hand when the game ends.
