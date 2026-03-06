@@ -385,7 +385,14 @@ const GameBoard: React.FC = () => {
     const addGroup = () => {
         if (selectedTileIds.size < 3) return alert(t('selectAtLeast3'));
 
-        const tilesToGroup = hand.filter(t => selectedTileIds.has(t.id));
+        // Sort tiles before grouping so they look organized in the UI
+        const tilesToGroup = hand
+            .filter(t => selectedTileIds.has(t.id))
+            .sort((a, b) => {
+                if (a.color !== b.color) return a.color.localeCompare(b.color);
+                return a.number - b.number;
+            });
+
         if (tilesToGroup.length < selectedTileIds.size) {
             return alert('Bazı taşlar zaten gruplanmış veya elinizde değil.');
         }

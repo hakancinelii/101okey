@@ -44,7 +44,7 @@ export function distributeTiles(pool: Tile[], memberCount: number): { hands: Til
 
     return { hands, remainingPool: currentPool };
 }
-export function calculateSetScore(tiles: Tile[], okeyTile: Tile): { isValid: boolean, score: number } {
+export function calculateSetScore(tiles: Tile[], okeyTile: Tile): { isValid: boolean, score: number, reason?: string } {
     if (tiles.length < 3) return { isValid: false, score: 0 };
 
     // Mark wildcards and normalize values
@@ -65,7 +65,8 @@ export function calculateSetScore(tiles: Tile[], okeyTile: Tile): { isValid: boo
     });
 
     // Check if it's a valid group (same number, different colors)
-    if (isValidGroup(tilesWithMeta)) {
+    const groupRes = isValidGroup(tilesWithMeta);
+    if (groupRes.isValid) {
         const nonWildcards = tilesWithMeta.filter(t => !t.isWildcard);
         const baseNum = nonWildcards.length > 0 ? nonWildcards[0].number : (okeyTile.number % 13) + 1;
         return { isValid: true, score: baseNum * tiles.length };
@@ -77,22 +78,24 @@ export function calculateSetScore(tiles: Tile[], okeyTile: Tile): { isValid: boo
         return seqResult;
     }
 
-    return { isValid: false, score: 0 };
+    return { isValid: false, score: 0, reason: groupRes.reason || 'INVALID_STRUCTURE' };
 }
 
-function isValidGroup(tiles: any[]): boolean {
-    if (tiles.length < 3 || tiles.length > 4) return false;
+function isValidGroup(tiles: any[]): { isValid: boolean, reason?: string } {
+    if (tiles.length < 3) return { isValid: false, reason: 'SET_TOO_SHORT' };
+    if (tiles.length > 4) return { isValid: false, reason: 'GROUP_TOO_LONG' };
+
     const nonWildcards = tiles.filter(t => !t.isWildcard);
-    if (nonWildcards.length === 0) return true;
+    if (nonWildcards.length === 0) return { isValid: true };
 
     const baseNum = nonWildcards[0].number;
     const colors = new Set();
     for (const t of nonWildcards) {
-        if (t.number !== baseNum) return false;
-        if (colors.has(t.color)) return false;
+        if (t.number !== baseNum) return { isValid: false, reason: 'GROUP_DIFFERENT_NUMBERS' };
+        if (colors.has(t.color)) return { isValid: false, reason: 'GROUP_DUPLICATE_COLORS' };
         colors.add(t.color);
     }
-    return true;
+    return { isValid: true };
 }
 
 function getSequenceScore(tiles: any[]): { isValid: boolean, score: number } {
@@ -175,11 +178,11 @@ function getSequenceScore(tiles: any[]): { isValid: boolean, score: number } {
 
     return { isValid: true, score: currentScore };
 }
-export function calculateMultipleSetsScore(sets: Tile[][], okeyTile: Tile): { isValid: boolean, totalScore: number } {
+export function calculateMultipleSetsScore(sets: Tile[][], okeyTile: Tile): { isValid: boolean, totalScore: number, reason?: string } {
     let totalScore = 0;
     for (const set of sets) {
         const res = calculateSetScore(set, okeyTile);
-        if (!res.isValid) return { isValid: false, totalScore: 0 };
+        if (!res.isValid) return { isValid: false, totalScore: 0, reason: res.reason };
         totalScore += res.score;
     }
     return { isValid: true, totalScore };

@@ -1281,7 +1281,17 @@ export const initSocket = (httpServer: HttpServer) => {
                     );
 
                     const result = calculateMultipleSetsScore(setsOfTiles, okeyTile);
-                    if (!result.isValid) return callback('Geçersiz set yapısı. Lütfen perlerinizi kontrol edin (Grup: Aynı sayı/farklı renk, Seri: Aynı renk/ardışık sayı).');
+                    if (!result.isValid) {
+                        let errorMsg = 'Geçersiz set yapısı. Lütfen perlerinizi kontrol edin.';
+                        if (result.reason === 'GROUP_DUPLICATE_COLORS') {
+                            errorMsg = 'Hata: Bir grupta aynı renkten iki taş bulunamaz (Örn: İki tane Siyah 3 olamaz).';
+                        } else if (result.reason === 'GROUP_DIFFERENT_NUMBERS') {
+                            errorMsg = 'Hata: Gruplar aynı sayılardan oluşmalıdır.';
+                        } else if (result.reason === 'SET_TOO_SHORT') {
+                            errorMsg = 'Hata: Perler en az 3 taştan oluşmalıdır.';
+                        }
+                        return callback(errorMsg);
+                    }
 
                     const currentOpenScore = (member as any).openScore || 0;
                     const newTotalScore = result.totalScore;
