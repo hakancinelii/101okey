@@ -198,16 +198,21 @@ export function calculateMultipleSetsScore(sets: Tile[][], okeyTile: Tile): { is
 export function calculateHandPenalty(hand: Tile[], okeyTile: Tile, hasOpened: boolean): number {
     if (!hasOpened) return 202;
 
+    const jokerNumber = (okeyTile.number % 13) + 1;
     let total = 0;
+
     hand.forEach(t => {
-        const isOkey = t.isJoker || (okeyTile && t.color === okeyTile.color && t.number === okeyTile.number);
-        if (isOkey) {
+        const isActuallyOkey = (t.color === okeyTile.color && t.number === jokerNumber) || t.isJoker;
+        if (isActuallyOkey) {
             total += 101;
+        } else if (t.isFakeJoker) {
+            total += jokerNumber;
         } else {
             total += t.number;
         }
     });
-    return total;
+
+    return total === 0 ? 0 : total; // Should not be 0 unless they just finished
 }
 export function canAddTileToSet(existingSet: Tile[], newTile: Tile, okeyTile: Tile): { isValid: boolean, newSet: Tile[] } {
     // Try to create a valid set with the new tile
