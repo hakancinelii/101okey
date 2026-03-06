@@ -370,9 +370,18 @@ const GameBoard: React.FC = () => {
 
     const addGroup = () => {
         if (selectedTileIds.size < 3) return alert(t('selectAtLeast3'));
-        const tilesInGroup = hand.filter(t => selectedTileIds.has(t.id));
-        setPendingSets(prev => [...prev, tilesInGroup]);
+
+        const tilesToGroup = hand.filter(t => selectedTileIds.has(t.id));
+        if (tilesToGroup.length < selectedTileIds.size) {
+            return alert('Bazı taşlar zaten gruplanmış veya elinizde değil.');
+        }
+
+        setPendingSets(prev => [...prev, tilesToGroup]);
+
+        // Remove from hand AND rackSlots immediately
         setHand(prev => prev.filter(t => !selectedTileIds.has(t.id)));
+        setRackSlots(prev => prev.map(slot => (slot && selectedTileIds.has(slot.id)) ? null : slot));
+
         setSelectedTileIds(new Set());
     };
 
@@ -1273,8 +1282,8 @@ const GameBoard: React.FC = () => {
                     <div className="bg-black/60 px-4 py-1.5 rounded-full backdrop-blur-md border border-white/10 flex items-center space-x-4">
                         <div className="flex items-center space-x-1">
                             <span className="text-[10px] font-black text-amber-500">101?</span>
-                            <span className={`text-xs font-black ${pendingSets.flat().reduce((acc, t) => acc + t.number, 0) >= 101 ? 'text-green-400' : 'text-white'}`}>
-                                {pendingSets.flat().reduce((acc, t) => acc + t.number, 0)}
+                            <span className={`text-xs font-black ${pendingSets.flat().reduce((acc, t) => acc + (t.color === 'fake' && okeyTile ? okeyTile.number : t.number), 0) >= 101 ? 'text-green-400' : 'text-white'}`}>
+                                {pendingSets.flat().reduce((acc, t) => acc + (t.color === 'fake' && okeyTile ? okeyTile.number : t.number), 0)}
                             </span>
                         </div>
                         <div className="w-[1px] h-3 bg-white/20"></div>
