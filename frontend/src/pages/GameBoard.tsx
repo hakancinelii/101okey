@@ -266,6 +266,20 @@ const GameBoard: React.FC = () => {
             }));
         });
 
+        socket.on('tileAddedToSet', (data: { userId: string, targetUserId: string, setIndex: number, tile: Tile }) => {
+            setMembers(prev => prev.map(m => {
+                if (m.userId === data.targetUserId) {
+                    const currentSets = (m.openSets as Tile[][]) || [];
+                    const newSets = [...currentSets];
+                    if (newSets[data.setIndex]) {
+                        newSets[data.setIndex] = [...newSets[data.setIndex], data.tile];
+                    }
+                    return { ...m, openSets: newSets };
+                }
+                return m;
+            }));
+        });
+
         // Chat messages
         socket.on('chatMessage', (msg: ChatMessage) => {
             setChat((prev) => [...prev, msg]);
@@ -696,7 +710,7 @@ const GameBoard: React.FC = () => {
                             )}
                         </div>
                         <div className="w-2 h-2 border border-black/10 rounded-full mt-0.5 shadow-inner pointer-events-none"
-                            style={{ backgroundColor: tile.color === 'fake' && okeyTile ? okeyTile.color : (tile.color === 'yellow' ? '#d97706' : tile.color === 'black' ? '#0f172a' : tile.color) }}>
+                            style={{ backgroundColor: (tile.color === 'fake' || tile.isFakeJoker) && okeyTile ? okeyTile.color : (tile.color === 'yellow' ? '#d97706' : tile.color === 'black' ? '#0f172a' : tile.color) }}>
                         </div>
                     </>
                 )}
@@ -716,14 +730,25 @@ const GameBoard: React.FC = () => {
         return members[idx];
     };
 
+    const handleAddToSet = (targetUserId: string, setIndex: number) => {
+        if (selectedTileIds.size !== 1) return;
+        const tileId = Array.from(selectedTileIds)[0];
+        socketRef.current?.emit('addToSet', { targetUserId, setIndex, tileId }, (err?: string) => {
+            if (err) alert(err);
+            else setSelectedTileIds(new Set());
+        });
+    };
+
     const renderOpenSetsArea = (player: Member | null) => {
         if (!player || !player.openSets || player.openSets.length === 0) return null;
         return (
-            <div className="flex flex-wrap gap-3 justify-center items-start p-4 max-h-full overflow-y-auto no-scrollbar bg-black/5 rounded-3xl border border-white/5 backdrop-blur-sm shadow-inner">
+            <div className="flex flex-wrap gap-2 justify-center items-start p-3 max-h-[140px] w-full overflow-y-auto no-scrollbar bg-black/40 rounded-3xl border border-white/10 backdrop-blur-md shadow-2xl">
                 {player.openSets.map((set: Tile[], sIdx: number) => (
-                    <div key={sIdx} className="flex gap-0.5 bg-gradient-to-br from-white/10 to-transparent p-1.5 rounded-xl border border-white/10 shadow-lg relative group">
-                        {/* Decorative 'slot' background */}
-                        <div className="absolute inset-x-1 bottom-1 h-1 bg-black/20 rounded-full blur-[1px]"></div>
+                    <div
+                        key={sIdx}
+                        onClick={() => handleAddToSet(player.userId, sIdx)}
+                        className="flex gap-0.5 bg-white/5 p-1 rounded-lg border border-white/5 hover:border-amber-500/50 hover:bg-white/10 transition-all cursor-pointer relative group"
+                    >
                         {set.map(t => renderTile(t))}
                     </div>
                 ))}
@@ -807,6 +832,17 @@ const GameBoard: React.FC = () => {
                         </div>
                     )}
                 </div>
+
+                {/* Open Sets Container Overlay */}
+                {player && player.openSets && player.openSets.length > 0 && (
+                    <div className={`absolute pointer-events-auto transition-all duration-500 ${relativePos === 0 ? 'bottom-full mb-32 w-[600px]' :
+                        relativePos === 1 ? 'right-full mr-12 w-[350px]' :
+                            relativePos === 2 ? 'top-full mt-32 w-[600px]' :
+                                'left-full ml-12 w-[350px]'
+                        }`}>
+                        {renderOpenSetsArea(player)}
+                    </div>
+                )}
             </div>
         );
     };

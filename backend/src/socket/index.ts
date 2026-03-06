@@ -3,7 +3,7 @@ import { Server as HttpServer } from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { PrismaClient, GameStatus, MoveType } from '@prisma/client';
 import { verifyToken } from '../middleware/auth';
-import { generateTilePool, shuffle, distributeTiles, calculateSetScore, calculateMultipleSetsScore, calculateHandPenalty } from '../game/logic';
+import { generateTilePool, shuffle, distributeTiles, calculateSetScore, calculateMultipleSetsScore, calculateHandPenalty, canAddTileToSet } from '../game/logic';
 import redis from '../redisClient';
 import { Tile } from '../game/rules';
 
@@ -1264,8 +1264,16 @@ export const initSocket = (httpServer: HttpServer) => {
                     const currentHand = (member.hand as any) || [];
 
                     const allTileIds = setsOfIds.flat();
-                    const usedTiles = currentHand.filter((t: any) => allTileIds.includes(t.id));
-                    if (usedTiles.length !== allTileIds.length) return callback('Bazı taşlar elinizde değil');
+                    const uniqueIds = new Set(allTileIds);
+                    if (uniqueIds.size !== allTileIds.length) {
+                        return callback('Aynı taşı birden fazla kez kullanamazsınız.');
+                    }
+
+                    const missingIds = allTileIds.filter(id => !currentHand.find((t: any) => t.id === id));
+                    if (missingIds.length > 0) {
+                        console.log(`[PlaceSetsError] Game ${activeGameId}, User ${userId} missing IDs: ${missingIds.join(', ')}`);
+                        return callback('Bazı taşlar elinizde değil (Senkronizasyon hatası). Lütfen sayfayı yenileyip tekrar deneyin.');
+                    }
 
                     // Convert IDs back to Tile objects for validation
                     const setsOfTiles = setsOfIds.map(ids =>
@@ -1273,14 +1281,14 @@ export const initSocket = (httpServer: HttpServer) => {
                     );
 
                     const result = calculateMultipleSetsScore(setsOfTiles, okeyTile);
-                    if (!result.isValid) return callback('Geçersiz setler');
+                    if (!result.isValid) return callback('Geçersiz set yapısı. Lütfen perlerinizi kontrol edin (Grup: Aynı sayı/farklı renk, Seri: Aynı renk/ardışık sayı).');
 
                     const currentOpenScore = (member as any).openScore || 0;
-                    const newTotalScore = currentOpenScore + result.totalScore;
+                    const newTotalScore = result.totalScore;
 
                     // 101 Rule: Must reach 101 to open first time
                     if (currentOpenScore === 0 && newTotalScore < 101) {
-                        return callback(`Hala 101 sayısına ulaşamadınız: ${newTotalScore}`);
+                        return callback(`Toplam puanınız (${newTotalScore}) henüz 101 barajına ulaşmadı. Seri veya gruplarınızı büyütmelisiniz.`);
                     }
 
                     const updatedHand = currentHand.filter((t: any) => !allTileIds.includes(t.id));
@@ -1304,6 +1312,68 @@ export const initSocket = (httpServer: HttpServer) => {
                         const setRes = calculateSetScore(set, okeyTile);
                         io.to(activeGameId).emit('setPlaced', { userId, tiles: set, score: setRes.score });
                     }
+
+                    callback();
+                } catch (e) {
+                    console.error(e);
+                    callback('Sunucu hatası');
+                }
+            });
+        });
+
+        socket.on('addToSet', async (data: { targetUserId: string, setIndex: number, tileId: string }, callback: (err?: string) => void) => {
+            const activeGameId = (socket as any).activeGameId;
+            if (!activeGameId) return callback('Lütfen önce oyuna katılın');
+
+            commandQueue.enqueue(activeGameId, async () => {
+                try {
+                    const game = await prisma.game.findUnique({
+                        where: { id: activeGameId },
+                        include: { members: true }
+                    }) as any;
+
+                    const myMember = game.members.find((m: any) => m.userId === userId);
+                    if (!myMember) return callback('Üye bulunamadı');
+                    if (myMember.openScore === 0) return callback('Taş işleyebilmek için önce elinizi açmalısınız.');
+
+                    if (game.turnIndex !== myMember.seat) return callback('Sıra sizde değil');
+                    if (!myMember.hasDrawn) return callback('Önce taş çekmelisiniz');
+
+                    const targetMember = game.members.find((m: any) => m.userId === data.targetUserId);
+                    if (!targetMember || !targetMember.openSets) return callback('Geçersiz hedef oyuncu');
+
+                    const openSets = [...(targetMember.openSets as any[])];
+                    if (data.setIndex < 0 || data.setIndex >= openSets.length) return callback('Geçersiz set indeksi');
+
+                    const currentHand = (myMember.hand as any[]) || [];
+                    const tileToAdd = currentHand.find((t: any) => t.id === data.tileId);
+                    if (!tileToAdd) return callback('Taş elinizde bulunamadı');
+
+                    const validation = canAddTileToSet(openSets[data.setIndex], tileToAdd, game.okeyTile as any);
+                    if (!validation.isValid) return callback('Bu taş bu sete eklenemez');
+
+                    // Update data
+                    const updatedHand = currentHand.filter((t: any) => t.id !== data.tileId);
+                    openSets[data.setIndex] = validation.newSet;
+
+                    await prisma.$transaction([
+                        prisma.gameMember.update({
+                            where: { id: myMember.id },
+                            data: { hand: updatedHand } as any
+                        }),
+                        prisma.gameMember.update({
+                            where: { id: targetMember.id },
+                            data: { openSets: openSets as any } as any
+                        })
+                    ]);
+
+                    await updateGameCache(activeGameId);
+                    io.to(activeGameId).emit('tileAddedToSet', {
+                        userId,
+                        targetUserId: data.targetUserId,
+                        setIndex: data.setIndex,
+                        tile: tileToAdd
+                    });
 
                     callback();
                 } catch (e) {

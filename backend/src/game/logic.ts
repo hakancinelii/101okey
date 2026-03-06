@@ -196,3 +196,9 @@ export function calculateHandPenalty(hand: Tile[], okeyTile: Tile, hasOpened: bo
     });
     return total;
 }
+export function canAddTileToSet(existingSet: Tile[], newTile: Tile, okeyTile: Tile): { isValid: boolean, newSet: Tile[] } {
+    // Try to create a valid set with the new tile
+    const combined = [...existingSet, newTile];
+    const res = calculateSetScore(combined, okeyTile);
+    return { isValid: res.isValid, newSet: combined };
+}
