@@ -323,20 +323,71 @@ export const initSocket = (httpServer: HttpServer) => {
                 }
 
                 const currentHand = (currentMember.hand as any) || [];
+
+                // Bot Draw
                 const drawnTile = pool.shift();
-                const updatedHand = [...currentHand, drawnTile];
+                currentHand.push(drawnTile);
                 const okeyTile = game.okeyTile as any;
 
-                // Simple Bot Logic: Discard a non-okey tile
+                // Bot Brain: Try to find and place sets
+                const setsFound: Tile[][] = [];
+                // Simple greedy bot: group same numbers
+                const byNum: { [k: number]: Tile[] } = {};
+                currentHand.forEach((t: Tile) => {
+                    if (t.isJoker) return; // skip okey for now
+                    if (!byNum[t.number]) byNum[t.number] = [];
+                    byNum[t.number].push(t);
+                });
+
+                Object.values(byNum).forEach(grp => {
+                    if (grp.length >= 3) {
+                        const uniqueColors = new Set(grp.map(t => t.color));
+                        if (uniqueColors.size === grp.length) {
+                            setsFound.push(grp);
+                        }
+                    }
+                });
+
+                // If bot hasn't opened, check 101 rule
+                const score = setsFound.reduce((acc, s) => acc + calculateSetScore(s, okeyTile).score, 0);
+                const canOpen = (currentMember.openScore || 0) > 0 || score >= 101;
+
+                if (canOpen && setsFound.length > 0) {
+                    const allPlacedIds = new Set(setsFound.flat().map(t => t.id));
+                    const newHand = currentHand.filter((t: Tile) => !allPlacedIds.has(t.id));
+                    const existingSets = (currentMember.openSets as any) || [];
+
+                    await prisma.gameMember.update({
+                        where: { id: currentMember.id },
+                        data: {
+                            hand: newHand,
+                            openSets: [...existingSets, ...setsFound] as any,
+                            openScore: { increment: score }
+                        } as any
+                    });
+
+                    io.to(gameId).emit('setPlaced', {
+                        userId: currentMember.userId,
+                        tiles: setsFound.flat(), // Simplified emit for now
+                        score: score
+                    });
+
+                    // Update local hand for discard
+                    currentHand.length = 0;
+                    currentHand.push(...newHand);
+                }
+
+                // Bot Discard
                 let discardIndex = 0;
-                if (updatedHand.length > 1) {
-                    const nonOkeyIdx = updatedHand.findIndex(t => !(t.color === okeyTile.color && t.number === okeyTile.number));
+                if (currentHand.length > 1) {
+                    const jokerNumber = (okeyTile.number % 13) + 1;
+                    const nonOkeyIdx = currentHand.findIndex((t: Tile) => !(t.color === okeyTile.color && t.number === jokerNumber));
                     if (nonOkeyIdx !== -1) discardIndex = nonOkeyIdx;
                 }
-                const discardedTile = updatedHand[discardIndex];
-                updatedHand.splice(discardIndex, 1);
+                const discardedTile = currentHand[discardIndex];
+                currentHand.splice(discardIndex, 1);
 
-                // Robust next turn
+                // Next turn
                 const currIdx = members.findIndex(m => m.seat === game.turnIndex);
                 const nextMember = members[(currIdx + 1) % members.length];
                 const nextTurn = nextMember.seat;
@@ -348,7 +399,7 @@ export const initSocket = (httpServer: HttpServer) => {
                     }),
                     prisma.gameMember.update({
                         where: { id: currentMember.id },
-                        data: { hand: updatedHand, hasDrawn: false, mustOpen: false } as any
+                        data: { hand: currentHand, hasDrawn: false, mustOpen: false } as any
                     }),
                     prisma.gameMember.update({
                         where: { id: nextMember.id },

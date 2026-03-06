@@ -137,9 +137,7 @@ const GameBoard: React.FC = () => {
 
         // Receive periodic game state or updates
         socket.on('gameState', (state: any) => {
-            if (!state || !state.hand) return;
-
-            // IMPORTANT: Filter out tiles that are already in pending sets to avoid duplicates
+            // Filter out tiles that are in pending sets to avoid duplication glitches
             const pendingIds = new Set(pendingSets.flat().map(t => t.id));
             const filteredHand = Array.isArray(state.hand) ? (state.hand as Tile[]).filter((t: Tile) => !pendingIds.has(t.id)) : [];
             setHand(filteredHand);
@@ -197,10 +195,12 @@ const GameBoard: React.FC = () => {
             setIsGameEnded(false);
             setShowFinishModal(false);
             if (data.hand) {
-                setHand(data.hand);
+                const pendingIds = new Set(pendingSets.flat().map(t => t.id));
+                const filtered = data.hand.filter((t: Tile) => !pendingIds.has(t.id));
+                setHand(filtered);
                 setRackSlots(_prev => {
                     const next = new Array(44).fill(null);
-                    data.hand.forEach((tile, i) => { if (i < 44) next[i] = tile; });
+                    filtered.forEach((tile: Tile, i: number) => { if (i < 44) next[i] = tile; });
                     return next;
                 });
             }
@@ -385,13 +385,22 @@ const GameBoard: React.FC = () => {
     const addGroup = () => {
         if (selectedTileIds.size < 3) return alert(t('selectAtLeast3'));
 
-        // Sort tiles before grouping so they look organized in the UI
-        const tilesToGroup = hand
-            .filter(t => selectedTileIds.has(t.id))
-            .sort((a, b) => {
-                if (a.color !== b.color) return a.color.localeCompare(b.color);
-                return a.number - b.number;
+        // Get selected tiles IN THE ORDER THEY APPEAR ON THE RACK (preserving user manual arrangement)
+        const tilesToGroup: Tile[] = [];
+        rackSlots.forEach(slot => {
+            if (slot && selectedTileIds.has(slot.id)) {
+                tilesToGroup.push(slot);
+            }
+        });
+
+        if (tilesToGroup.length < selectedTileIds.size) {
+            // Fallback for edge cases where it's in hand but not in rack slots
+            const missingIds = Array.from(selectedTileIds).filter(id => !tilesToGroup.some(t => t.id === id));
+            missingIds.forEach(id => {
+                const t = hand.find(h => h.id === id);
+                if (t) tilesToGroup.push(t);
             });
+        }
 
         if (tilesToGroup.length < selectedTileIds.size) {
             return alert('Bazı taşlar zaten gruplanmış veya elinizde değil.');
@@ -400,8 +409,9 @@ const GameBoard: React.FC = () => {
         setPendingSets(prev => [...prev, tilesToGroup]);
 
         // Remove from hand AND rackSlots immediately
-        setHand(prev => prev.filter(t => !selectedTileIds.has(t.id)));
-        setRackSlots(prev => prev.map(slot => (slot && selectedTileIds.has(slot.id)) ? null : slot));
+        const idsToRemove = new Set(tilesToGroup.map(t => t.id));
+        setHand(prev => prev.filter(t => !idsToRemove.has(t.id)));
+        setRackSlots(prev => prev.map(slot => (slot && idsToRemove.has(slot.id)) ? null : slot));
 
         setSelectedTileIds(new Set());
     };
