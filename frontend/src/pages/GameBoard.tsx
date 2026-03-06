@@ -974,6 +974,9 @@ const GameBoard: React.FC = () => {
                         </div>
                         <span className="text-[11px] font-black tracking-widest uppercase notranslate" translate="no">{getUserInfo().name}</span>
                     </div>
+                    <div className="text-[8px] font-black text-white/30 tracking-[0.3em] uppercase mt-0.5">
+                        {t('modeEl')} {currentRound} / {maxRounds}
+                    </div>
                 </div>
 
                 <div className="flex items-center space-x-3">
@@ -1081,6 +1084,51 @@ const GameBoard: React.FC = () => {
                     <PlayerSpot player={getPlayerByRelativePos(3)} isTurn={turnIndex === (getPlayerByRelativePos(3)?.seat ?? -1)} relativePos={3} />
                 </div>
 
+                {/* ====== CENTER HUD: Okey & Deck (Positioned to avoid quadrants) ====== */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
+                    <div className="w-[85%] h-[75%] relative">
+                        {/* Okey Indicator - Fixed far left center */}
+                        <div className="absolute top-1/2 left-4 -translate-y-1/2 pointer-events-auto">
+                            <div className="flex flex-col items-center glass-hud py-3 px-4 rounded-2xl border border-white/10 bg-black/60 shadow-2xl scale-90">
+                                <span className="text-[7px] uppercase font-black opacity-30 mb-1 tracking-widest text-amber-500 whitespace-nowrap uppercase">{t('okeyTile')}</span>
+                                <div className="scale-75">
+                                    {okeyTile && renderTile(okeyTile)}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Deck - Fixed far right center */}
+                        <div className="absolute top-1/2 right-4 -translate-y-1/2 pointer-events-auto">
+                            <div className="flex flex-col items-center bg-black/60 px-4 py-4 rounded-3xl border border-white/10 backdrop-blur-md shadow-2xl scale-90">
+                                <span className="text-[7px] uppercase font-black opacity-30 mb-2 tracking-widest text-white whitespace-nowrap uppercase">{t('deckLabel')}</span>
+                                <div className={`relative group ${hasDrawn || !isMyTurn ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                                    onClick={() => { if (!hasDrawn && isMyTurn) drawTile(); }}
+                                >
+                                    <div className="absolute -top-1 -left-1 w-8 h-12 bg-white/10 rounded-md -rotate-3 border border-black/20"></div>
+                                    <div className={`w-8 h-12 bg-gradient-to-br from-white to-gray-200 rounded-md shadow-xl flex flex-col items-center justify-center -rotate-1 group-hover:rotate-0 transition-transform ${hasDrawn ? 'border-green-400' : 'border-gray-400'}`}>
+                                        <span className="text-black font-black text-lg leading-none">{deckCount}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Scoreboard - Small side panel */}
+                        <div className="absolute bottom-4 right-4 pointer-events-auto group">
+                            <div className="w-10 h-10 bg-black/60 rounded-full border border-white/10 flex items-center justify-center hover:w-32 hover:rounded-xl transition-all overflow-hidden cursor-help">
+                                <span className="text-sm shrink-0">📊</span>
+                                <div className="hidden group-hover:flex flex-col ml-2 pr-2">
+                                    {members.slice(0, 4).map(m => (
+                                        <div key={m.userId} className="flex justify-between w-20 text-[8px] font-black uppercase">
+                                            <span className="truncate mr-1">{m.name}</span>
+                                            <span className="text-amber-400">{m.openScore || 0}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 {/* ====== DISCARD PILE - centered on table ====== */}
                 <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
                     <div className="relative w-52 h-40">
@@ -1147,80 +1195,8 @@ const GameBoard: React.FC = () => {
                 </div>
 
                 {/* Center Stats & Scoreboard - Positioned to side-step the discard pile */}
-                <div className="relative z-10 flex items-center space-x-10">
+                {/* Discarded tile area could be here if needed */}
 
-                    {/* Okey Indicator - Shaved off the center to the left */}
-                    <div className="flex flex-col items-center glass-hud py-6 px-7 rounded-[35px] border border-white/10 bg-black/40 shadow-2xl">
-                        <span className="text-[9px] uppercase font-black opacity-30 mb-3 tracking-[0.2em] text-amber-500 whitespace-nowrap">{t('okeyTile')}</span>
-                        <div className="scale-125 transition-transform hover:scale-135 duration-500">
-                            {okeyTile && renderTile(okeyTile)}
-                        </div>
-                    </div>
-
-                    {/* Game Mode Indicators (Visual Only) */}
-                    <div className="flex flex-col space-y-1.5 glass-hud p-2 rounded-xl border border-white/5 bg-black/20">
-                        <div className="bg-blue-600/40 px-3 py-1 rounded text-[9px] font-black text-blue-200 border border-blue-500/30 uppercase text-center tracking-wider">{t('modeEshli')}</div>
-                        <div className="bg-green-600/40 px-3 py-1 rounded text-[9px] font-black text-green-200 border border-green-500/30 uppercase text-center tracking-wider">{t('modeYardimli')}</div>
-                        <div className="bg-red-600/40 px-3 py-1 rounded text-[9px] font-black text-red-200 border border-red-500/30 uppercase text-center tracking-wider">{t('modeKatlamali')}</div>
-                        <div className="bg-white/10 px-3 py-1 rounded text-[9px] font-black text-white border border-white/10 uppercase text-center tracking-wider font-extrabold shadow-lg">
-                            {currentRound}/{maxRounds} {t('modeEl')}
-                        </div>
-                    </div>
-
-                    {/* CENTRAL GAP - This is where the discard pile (absolute z-20) will appear cleanly */}
-                    <div className="w-48"></div>
-
-                    <div className="flex flex-col items-center bg-black/40 px-8 py-8 rounded-[40px] border border-white/10 backdrop-blur-md shadow-2xl relative overflow-hidden">
-                        {/* Inner shadow/glare for the tray */}
-                        <div className="absolute inset-0 bg-gradient-to-tr from-white/5 to-transparent pointer-events-none"></div>
-
-                        <div className="flex flex-col items-center">
-                            <span className="text-[10px] uppercase font-black opacity-40 mb-3 tracking-widest text-white">{t('deckLabel')}</span>
-                            <div className={`relative group ${hasDrawn || !isMyTurn ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
-                                onPointerDown={(e) => {
-                                    if (hasDrawn || !isMyTurn) return;
-                                    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-                                    setDraggingIdx(-100);
-                                    setDragStart({ x: e.clientX, y: e.clientY });
-                                    setDragPos({ x: 0, y: 0 });
-                                }}
-                                onClick={() => { if (!hasDrawn && isMyTurn) drawTile(); }}
-                            >
-                                {/* Physical stack effect */}
-                                <div className="absolute -top-1.5 -left-1.5 w-11 h-16 bg-white/10 rounded-lg -rotate-3 border border-black/20"></div>
-                                <div className="absolute -top-0.5 -left-0.5 w-11 h-16 bg-white/20 rounded-lg rotate-1 border border-black/20"></div>
-
-                                <div className={`w-11 h-16 bg-gradient-to-br from-white to-gray-200 rounded-lg shadow-2xl flex flex-col items-center justify-center -rotate-1 group-hover:rotate-0 group-hover:-translate-y-2 transition-all duration-300 border-b-4 ${hasDrawn ? 'border-green-400' : 'border-gray-400'}`}>
-                                    <span className="text-black font-black text-2xl leading-none drop-shadow-sm">{deckCount}</span>
-                                    <div className={`w-2.5 h-2.5 rounded-full mt-1.5 opacity-30 shadow-inner ${hasDrawn ? 'bg-green-500' : 'bg-blue-600'}`}></div>
-                                </div>
-                                {hasDrawn && isMyTurn && (
-                                    <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] text-green-400 font-black whitespace-nowrap bg-black/60 px-2 py-0.5 rounded-full">✓ Çekildi</div>
-                                )}
-                            </div>
-                        </div>
-
-                    </div>
-
-                    {/* Side Scoreboard (Like 101 Plus) */}
-                    <div className="w-28 glass-hud rounded-2xl p-0.5 border border-white/10 flex flex-col overflow-hidden max-h-56 shadow-2xl">
-                        <div className="bg-white/5 px-2 py-1.5 flex items-center justify-between border-b border-white/5">
-                            <span className="text-[9px] font-black uppercase tracking-widest opacity-60">{t('scoresLabel')}</span>
-                            <span className="text-[10px] opacity-40">📊</span>
-                        </div>
-                        <div className="p-1 space-y-1 overflow-y-auto no-scrollbar">
-                            {members.map((m) => (
-                                <div key={m.userId} className={`flex items-center justify-between px-2 py-1.5 rounded-xl transition-all ${turnIndex === m.seat ? 'bg-amber-500/20 border border-amber-500/30' : 'bg-black/20 border border-transparent'}`}>
-                                    <div className="flex items-center space-x-2 truncate">
-                                        <div className={`w-1.5 h-1.5 rounded-full ${turnIndex === m.seat ? 'bg-amber-400 animate-pulse' : 'bg-white/10'}`}></div>
-                                        <span className="text-[10px] font-bold truncate opacity-80">{m.name}</span>
-                                    </div>
-                                    <span className={`text-[11px] font-black ${turnIndex === m.seat ? 'text-amber-400' : 'text-white'}`}>{m.openScore || 0}</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
 
                 {/* Pending Sets Area - Moved up to avoid rack overlap */}
                 {pendingSets.length > 0 && (
