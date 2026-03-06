@@ -47,17 +47,27 @@ export function distributeTiles(pool: Tile[], memberCount: number): { hands: Til
 export function calculateSetScore(tiles: Tile[], okeyTile: Tile): { isValid: boolean, score: number } {
     if (tiles.length < 3) return { isValid: false, score: 0 };
 
-    // Mark wildcards
+    // Mark wildcards and normalize values
     const tilesWithMeta = tiles.map(t => {
-        const isOkey = t.isJoker || (okeyTile && t.color === okeyTile.color && t.number === okeyTile.number);
-        return { ...t, isWildcard: isOkey };
+        const jokerNumber = (okeyTile.number % 13) + 1;
+        const isActuallyJoker = (t.color === okeyTile.color && t.number === jokerNumber);
+        const isWildcard = t.isJoker || isActuallyJoker;
+
+        // If it's a Fake Joker, it MUST take the identity of the physical tile that became Joker
+        let effectiveNumber = t.number;
+        let effectiveColor = t.color;
+        if (t.isFakeJoker) {
+            effectiveNumber = jokerNumber;
+            effectiveColor = okeyTile.color;
+        }
+
+        return { ...t, number: effectiveNumber, color: effectiveColor, isWildcard };
     });
 
     // Check if it's a valid group (same number, different colors)
     if (isValidGroup(tilesWithMeta)) {
         const nonWildcards = tilesWithMeta.filter(t => !t.isWildcard);
-        // If all wildcards, use okeyTile number (unlikely edge case)
-        const baseNum = nonWildcards.length > 0 ? nonWildcards[0].number : okeyTile.number;
+        const baseNum = nonWildcards.length > 0 ? nonWildcards[0].number : (okeyTile.number % 13) + 1;
         return { isValid: true, score: baseNum * tiles.length };
     }
 

@@ -626,7 +626,8 @@ const GameBoard: React.FC = () => {
 
 
     const renderTile = (tile: Tile, onClick?: () => void) => {
-        const isActuallyOkey = okeyTile && tile.color === okeyTile.color && tile.number === okeyTile.number;
+        const jokerNumber = okeyTile ? (okeyTile.number % 13) + 1 : -1;
+        const isActuallyOkey = okeyTile && tile.color === okeyTile.color && tile.number === jokerNumber;
         const isOkey = tile.isJoker || tile.isFakeJoker || isActuallyOkey;
 
         const colorClass = {
@@ -644,17 +645,18 @@ const GameBoard: React.FC = () => {
                 className={`tile-3d w-9 h-12 rounded-lg flex flex-col items-center justify-center border border-amber-200/40 bg-amber-50 shadow-md ${isOkey ? 'ring-2 ring-amber-400 animate-okey-glow' : ''}`}
             >
                 <span className={`text-[14px] font-black leading-none ${colorClass}`}>
-                    {tile.isFakeJoker ? (okeyTile?.number || '?') : tile.number}
+                    {tile.isFakeJoker ? (jokerNumber > 0 ? jokerNumber : '?') : tile.number}
                 </span>
                 <div className="w-1.5 h-1.5 border border-black/10 rounded-full mt-0.5 shadow-inner"
-                    style={{ backgroundColor: tile.color === 'fake' && okeyTile ? okeyTile.color : (tile.color === 'yellow' ? '#f59e0b' : tile.color === 'black' ? '#0f172a' : tile.color) }}>
+                    style={{ backgroundColor: (tile.color === 'fake' || tile.isFakeJoker) && okeyTile ? okeyTile.color : (tile.color === 'yellow' ? '#f59e0b' : tile.color === 'black' ? '#0f172a' : tile.color) }}>
                 </div>
             </div>
         );
     };
 
     const renderGameTile = (tile: Tile, onClick?: () => void, dragIdx?: number) => {
-        const isActuallyOkey = okeyTile && tile.color === okeyTile.color && tile.number === okeyTile.number;
+        const jokerNumber = okeyTile ? (okeyTile.number % 13) + 1 : -1;
+        const isActuallyOkey = okeyTile && tile.color === okeyTile.color && tile.number === jokerNumber;
         const isOkey = tile.isJoker || tile.isFakeJoker || isActuallyOkey;
         const isSelected = selectedTileIds.has(tile.id);
         const isFlipped = flippedTileIds.has(tile.id);
@@ -700,7 +702,7 @@ const GameBoard: React.FC = () => {
                     <>
                         <div className="relative pointer-events-none">
                             <span className={`text-[22px] font-black tracking-tight ${colorClass} ${isOkey ? 'drop-shadow-sm' : ''}`}>
-                                {tile.isFakeJoker ? (okeyTile?.number || '?') : tile.number}
+                                {tile.isFakeJoker ? (jokerNumber > 0 ? jokerNumber : '?') : tile.number}
                             </span>
                             {isOkey && !tile.isFakeJoker && (
                                 <div className="absolute -top-1 -right-3 text-[10px] text-amber-600 font-bold">★</div>
@@ -1318,8 +1320,8 @@ const GameBoard: React.FC = () => {
                     <div className="bg-black/60 px-4 py-1.5 rounded-full backdrop-blur-md border border-white/10 flex items-center space-x-4">
                         <div className="flex items-center space-x-1">
                             <span className="text-[10px] font-black text-amber-500">101?</span>
-                            <span className={`text-xs font-black ${pendingSets.flat().reduce((acc, t) => acc + (t.color === 'fake' && okeyTile ? okeyTile.number : t.number), 0) >= 101 ? 'text-green-400' : 'text-white'}`}>
-                                {pendingSets.flat().reduce((acc, t) => acc + (t.color === 'fake' && okeyTile ? okeyTile.number : t.number), 0)}
+                            <span className={`text-xs font-black ${pendingSets.flat().reduce((acc, t) => acc + (t.isFakeJoker && okeyTile ? (okeyTile.number % 13) + 1 : t.number), 0) >= 101 ? 'text-green-400' : 'text-white'}`}>
+                                {pendingSets.flat().reduce((acc, t) => acc + (t.isFakeJoker && okeyTile ? (okeyTile.number % 13) + 1 : t.number), 0)}
                             </span>
                         </div>
                         <div className="w-[1px] h-3 bg-white/20"></div>
