@@ -1273,8 +1273,8 @@ const GameBoard: React.FC = () => {
                     <div className="bg-black/60 px-4 py-1.5 rounded-full backdrop-blur-md border border-white/10 flex items-center space-x-4">
                         <div className="flex items-center space-x-1">
                             <span className="text-[10px] font-black text-amber-500">101?</span>
-                            <span className={`text-xs font-black ${hand.reduce((acc, t) => acc + t.number, 0) >= 101 ? 'text-green-400' : 'text-white'}`}>
-                                {hand.reduce((acc, t) => acc + t.number, 0)}
+                            <span className={`text-xs font-black ${pendingSets.flat().reduce((acc, t) => acc + t.number, 0) >= 101 ? 'text-green-400' : 'text-white'}`}>
+                                {pendingSets.flat().reduce((acc, t) => acc + t.number, 0)}
                             </span>
                         </div>
                         <div className="w-[1px] h-3 bg-white/20"></div>
