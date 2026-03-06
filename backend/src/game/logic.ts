@@ -49,26 +49,24 @@ export function calculateSetScore(tiles: Tile[], okeyTile: Tile): { isValid: boo
 
     // Mark wildcards and normalize values
     const tilesWithMeta = tiles.map(t => {
-        const jokerNumber = (okeyTile.number % 13) + 1;
-        const isActuallyJoker = (t.color === okeyTile.color && t.number === jokerNumber);
+        const isActuallyJoker = (t.color === okeyTile.color && t.number === okeyTile.number);
         const isWildcard = t.isJoker || isActuallyJoker;
 
         // If it's a Fake Joker, it MUST take the identity of the physical tile that became Joker
         let effectiveNumber = t.number;
         let effectiveColor = t.color;
         if (t.isFakeJoker) {
-            effectiveNumber = jokerNumber;
+            effectiveNumber = okeyTile.number;
             effectiveColor = okeyTile.color;
         }
 
         return { ...t, number: effectiveNumber, color: effectiveColor, isWildcard };
     });
 
-    // Check if it's a valid group (same number, different colors)
     const groupRes = isValidGroup(tilesWithMeta);
     if (groupRes.isValid) {
         const nonWildcards = tilesWithMeta.filter(t => !t.isWildcard);
-        const baseNum = nonWildcards.length > 0 ? nonWildcards[0].number : (okeyTile.number % 13) + 1;
+        const baseNum = nonWildcards.length > 0 ? nonWildcards[0].number : okeyTile.number;
         return { isValid: true, score: baseNum * tiles.length };
     }
 
@@ -186,12 +184,11 @@ function getSequenceScore(tiles: any[]): { isValid: boolean, score: number } {
     return validateWrap();
 }
 function isPair(t1: Tile, t2: Tile, okeyTile: Tile): boolean {
-    const jokerNumber = (okeyTile.number % 13) + 1;
-    const isActuallyOkey = (t: Tile) => t.isJoker || (t.color === okeyTile.color && t.number === jokerNumber);
+    const isActuallyOkey = (t: Tile) => t.isJoker || (t.color === okeyTile.color && t.number === okeyTile.number);
 
     // Normalize fake jokers to the physical tile that became okey
-    const n1 = t1.isFakeJoker ? { color: okeyTile.color, number: jokerNumber } : t1;
-    const n2 = t2.isFakeJoker ? { color: okeyTile.color, number: jokerNumber } : t2;
+    const n1 = t1.isFakeJoker ? { color: okeyTile.color, number: okeyTile.number } : t1;
+    const n2 = t2.isFakeJoker ? { color: okeyTile.color, number: okeyTile.number } : t2;
 
     if (isActuallyOkey(t1) || isActuallyOkey(t2)) return true;
     return n1.color === n2.color && n1.number === n2.number;
@@ -230,15 +227,14 @@ export function calculateMultipleSetsScore(sets: Tile[][], okeyTile: Tile): { is
 export function calculateHandPenalty(hand: Tile[], okeyTile: Tile, hasOpened: boolean): number {
     if (!hasOpened) return 202;
 
-    const jokerNumber = (okeyTile.number % 13) + 1;
     let total = 0;
 
     hand.forEach(t => {
-        const isActuallyOkey = (t.color === okeyTile.color && t.number === jokerNumber) || t.isJoker;
+        const isActuallyOkey = (t.color === okeyTile.color && t.number === okeyTile.number) || t.isJoker;
         if (isActuallyOkey) {
             total += 101;
         } else if (t.isFakeJoker) {
-            total += jokerNumber;
+            total += okeyTile.number;
         } else {
             total += t.number;
         }

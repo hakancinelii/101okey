@@ -764,12 +764,12 @@ const GameBoard: React.FC = () => {
     const renderOpenSetsArea = (player: Member | null) => {
         if (!player || !player.openSets || player.openSets.length === 0) return null;
         return (
-            <div className="flex flex-wrap gap-2 justify-center items-start p-3 max-h-[140px] w-full overflow-y-auto no-scrollbar bg-black/40 rounded-3xl border border-white/10 backdrop-blur-md shadow-2xl">
+            <div className="flex flex-wrap gap-1.5 justify-center items-start p-2 max-h-[120px] w-full overflow-y-auto no-scrollbar bg-black/30 rounded-2xl border border-white/5 backdrop-blur-sm shadow-xl">
                 {player.openSets.map((set: Tile[], sIdx: number) => (
                     <div
                         key={sIdx}
                         onClick={() => handleAddToSet(player.userId, sIdx)}
-                        className="flex gap-0.5 bg-white/5 p-1 rounded-lg border border-white/5 hover:border-amber-500/50 hover:bg-white/10 transition-all cursor-pointer relative group"
+                        className="flex gap-0 scale-90 origin-top bg-white/5 p-0.5 rounded border border-white/5 hover:border-amber-500/50 hover:bg-white/10 transition-all cursor-pointer relative group"
                     >
                         {set.map(t => renderTile(t))}
                     </div>
@@ -836,7 +836,7 @@ const GameBoard: React.FC = () => {
                         </div>
 
                         {/* Circular Progress Timer (Full Wrap) */}
-                        {isTurn && <CircularTimer time={timeRemaining} max={60} />}
+                        {isTurn && <CircularTimer time={timeRemaining} max={120} />}
                     </div>
                 </div>
 
@@ -1222,23 +1222,22 @@ const GameBoard: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Pending Sets Area */}
+                {/* Pending Sets Area - Moved up to avoid rack overlap */}
                 {pendingSets.length > 0 && (
-                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex flex-wrap gap-4 justify-center animate-okey-glow max-w-lg p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
+                    <div className="absolute top-[10%] left-1/2 -translate-x-1/2 flex flex-nowrap gap-4 justify-start items-center animate-okey-glow max-w-[90%] p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md overflow-x-auto no-scrollbar scroll-smooth z-30">
                         {pendingSets.map((set, idx) => (
-                            <div key={idx} className="flex gap-0.5 bg-black/40 p-2 rounded-lg border border-white/10 relative group">
+                            <div key={idx} className="flex gap-0.5 bg-black/40 p-2 rounded-lg border border-white/10 relative group shrink-0">
                                 {set.map(t => renderTile(t))}
                                 <button
                                     onClick={() => {
                                         setHand(prev => {
                                             const newHand = [...prev, ...set];
-                                            // Remove duplicates if any, though ideally pending sets should not have duplicates with hand
                                             const handIds = new Set(newHand.map(t => t.id));
                                             return newHand.filter((t, i, a) => handIds.has(t.id) && a.findIndex(at => at.id === t.id) === i);
                                         });
                                         setPendingSets(prev => prev.filter((_, i) => i !== idx));
                                     }}
-                                    className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:scale-110"
+                                    className="absolute -top-2 -right-2 w-6 h-6 bg-red-600 text-white rounded-full flex items-center justify-center text-[11px] opacity-0 group-hover:opacity-100 transition-all shadow-xl hover:scale-125 z-10"
                                 >
                                     ✕
                                 </button>
@@ -1340,8 +1339,8 @@ const GameBoard: React.FC = () => {
                     <div className="bg-black/60 px-4 py-1.5 rounded-full backdrop-blur-md border border-white/10 flex items-center space-x-4">
                         <div className="flex items-center space-x-1">
                             <span className="text-[10px] font-black text-amber-500">101?</span>
-                            <span className={`text-xs font-black ${pendingSets.flat().reduce((acc, t) => acc + (t.isFakeJoker && okeyTile ? (okeyTile.number % 13) + 1 : t.number), 0) >= 101 ? 'text-green-400' : 'text-white'}`}>
-                                {pendingSets.flat().reduce((acc, t) => acc + (t.isFakeJoker && okeyTile ? (okeyTile.number % 13) + 1 : t.number), 0)}
+                            <span className={`text-xs font-black ${pendingSets.flat().reduce((acc, t) => acc + (t.isFakeJoker && okeyTile ? okeyTile.number : t.number), 0) >= 101 ? 'text-green-400' : 'text-white'}`}>
+                                {pendingSets.flat().reduce((acc, t) => acc + (t.isFakeJoker && okeyTile ? okeyTile.number : t.number), 0)}
                             </span>
                         </div>
                         <div className="w-[1px] h-3 bg-white/20"></div>
