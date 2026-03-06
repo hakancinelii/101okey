@@ -386,7 +386,7 @@ const GameBoard: React.FC = () => {
     };
 
     const addGroup = () => {
-        if (selectedTileIds.size < 3) return alert(t('selectAtLeast3'));
+        if (selectedTileIds.size < 2) return alert(t('selectAtLeast2'));
 
         // Get selected tiles IN THE ORDER THEY APPEAR ON THE RACK (preserving user manual arrangement)
         const tilesToGroup: Tile[] = [];
@@ -1348,8 +1348,8 @@ const GameBoard: React.FC = () => {
                             ) : (
                                 <>
                                     <span className="text-[10px] font-black text-amber-500">101?</span>
-                                    <span className={`text-xs font-black ${pendingSets.flat().reduce((acc, t) => acc + (t.isFakeJoker && okeyTile ? okeyTile.number : t.number), 0) >= 101 ? 'text-green-400' : 'text-white'}`}>
-                                        {pendingSets.flat().reduce((acc, t) => acc + (t.isFakeJoker && okeyTile ? okeyTile.number : t.number), 0)}
+                                    <span className={`text-xs font-black ${pendingSets.flat().reduce((acc, t) => acc + ((t.isFakeJoker || (okeyTile && t.color === okeyTile.color && t.number === okeyTile.number)) ? 101 : t.number), 0) >= 101 ? 'text-green-400' : 'text-white'}`}>
+                                        {pendingSets.flat().reduce((acc, t) => acc + ((t.isFakeJoker || (okeyTile && t.color === okeyTile.color && t.number === okeyTile.number)) ? 101 : t.number), 0)}
                                     </span>
                                 </>
                             )}

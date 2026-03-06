@@ -43,6 +43,7 @@
     "noSetsToOpen": "Açılacak set bulunamadı",
     "selectOneToDiscard": "Atmak için bir taş seçin",
     "selectAtLeast3": "En az 3 taş seçmelisiniz",
+    "selectAtLeast2": "En az 2 taş seçmelisiniz",
     "yourTurnMsg": "SIRA SİZDE",
     "opponentTurnMsg": "RAKİPTE",
     "addGroup": "GRUP YAP",

@@ -1469,16 +1469,19 @@ export const initSocket = (httpServer: HttpServer) => {
                     }
 
                     const result = calculateMultipleSetsScore(setsOfTiles, okeyTile);
-
                     if (!result.isValid) {
                         let errorMsg = 'Geçersiz set yapısı. Lütfen perlerinizi kontrol edin.';
-                        if (result.reason === 'GROUP_DUPLICATE_COLORS') {
+                        if (result.reason?.startsWith('INVALID_PAIR_AT_')) {
+                            const index = result.reason.split('_').pop();
+                            errorMsg = `Hata: ${index}. periniz (çift) geçersiz. Aynı renk ve sayı olmalıdır.`;
+                        } else if (result.reason === 'GROUP_DUPLICATE_COLORS') {
                             errorMsg = 'Hata: Bir grupta aynı renkten iki taş bulunamaz (Örn: İki tane Siyah 3 olamaz).';
                         } else if (result.reason === 'GROUP_DIFFERENT_NUMBERS') {
                             errorMsg = 'Hata: Gruplar aynı sayılardan oluşmalıdır.';
                         } else if (result.reason === 'SET_TOO_SHORT') {
-                            errorMsg = 'Hata: Perler en az 3 taştan oluşmalıdır.';
+                            errorMsg = 'Hata: Perler en az 3 taştan oluşmalıdır (Çift açmıyorsanız).';
                         }
+                        console.log(`[ValidationFail] User ${userId} Game ${activeGameId} Reason: ${result.reason}`);
                         return callback(errorMsg);
                     }
 
