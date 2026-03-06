@@ -11,25 +11,23 @@ dotenv.config();
 
 const app = express();
 
-app.use((req, res, next) => {
-    const origin = req.headers.origin;
-    if (origin) {
-        res.setHeader('Access-Control-Allow-Origin', origin);
-    }
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-
-    if (req.method === 'OPTIONS') {
-        return res.sendStatus(204);
-    }
-    next();
-});
+app.use(cors({
+    origin: (origin, callback) => {
+        // Allow all origins (browsers send Origin header, bots might not)
+        callback(null, true);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
 
 app.use(express.json());
 
-// Health check for Railway
-app.get('/api/health', (_req, res) => res.json({ status: 'ok', ts: Date.now() }));
+// Health check for Railway - Log to help debug 503
+app.get('/api/health', (req, res) => {
+    console.log(`[HealthCheck] ${req.method} from ${req.ip} - ${new Date().toISOString()}`);
+    res.json({ status: 'ok', ts: Date.now() });
+});
 
 // Auth routes
 app.use('/api/auth', authRouter);
