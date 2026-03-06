@@ -1075,7 +1075,6 @@ const GameBoard: React.FC = () => {
                         </div>
                     </div>
                 </div>
-
                 {/* Player Spots - Modern Circular Design */}
                 <div className="absolute inset-0 max-w-7xl mx-auto pointer-events-none">
                     <PlayerSpot player={getPlayerByRelativePos(0)} isTurn={turnIndex === (getPlayerByRelativePos(0)?.seat ?? -1)} relativePos={0} />
@@ -1084,23 +1083,23 @@ const GameBoard: React.FC = () => {
                     <PlayerSpot player={getPlayerByRelativePos(3)} isTurn={turnIndex === (getPlayerByRelativePos(3)?.seat ?? -1)} relativePos={3} />
                 </div>
 
-                {/* ====== CENTER HUD: Okey & Deck (Positioned to avoid quadrants) ====== */}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
-                    <div className="w-[85%] h-[75%] relative">
-                        {/* Okey Indicator - Fixed far left center */}
-                        <div className="absolute top-1/2 left-4 -translate-y-1/2 pointer-events-auto">
-                            <div className="flex flex-col items-center glass-hud py-3 px-4 rounded-2xl border border-white/10 bg-black/60 shadow-2xl scale-90">
-                                <span className="text-[7px] uppercase font-black opacity-30 mb-1 tracking-widest text-amber-500 whitespace-nowrap uppercase">{t('okeyTile')}</span>
+                {/* ====== BOTTOM HUD: Okey & Deck (Flanking Player Avatar) ====== */}
+                <div className="absolute bottom-20 left-1/2 -translate-x-1/2 w-full max-w-4xl flex items-end justify-center pointer-events-none z-40">
+                    <div className="relative w-full flex items-center justify-center gap-32">
+                        {/* Okey Indicator - Left Pod */}
+                        <div className="pointer-events-auto">
+                            <div className="flex flex-col items-center glass-hud py-2 px-3 rounded-2xl border border-white/10 bg-black/60 shadow-2xl scale-90">
+                                <span className="text-[7px] uppercase font-black opacity-30 mb-1 tracking-widest text-amber-500 whitespace-nowrap">{t('okeyTile')}</span>
                                 <div className="scale-75">
                                     {okeyTile && renderTile(okeyTile)}
                                 </div>
                             </div>
                         </div>
 
-                        {/* Deck - Fixed far right center */}
-                        <div className="absolute top-1/2 right-4 -translate-y-1/2 pointer-events-auto">
+                        {/* Deck - Right Pod */}
+                        <div className="pointer-events-auto">
                             <div className="flex flex-col items-center bg-black/60 px-4 py-4 rounded-3xl border border-white/10 backdrop-blur-md shadow-2xl scale-90">
-                                <span className="text-[7px] uppercase font-black opacity-30 mb-2 tracking-widest text-white whitespace-nowrap uppercase">{t('deckLabel')}</span>
+                                <span className="text-[7px] uppercase font-black opacity-30 mb-1 tracking-widest text-white whitespace-nowrap">{t('deckLabel')}</span>
                                 <div className={`relative group ${hasDrawn || !isMyTurn ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
                                     onClick={() => { if (!hasDrawn && isMyTurn) drawTile(); }}
                                 >
@@ -1112,8 +1111,8 @@ const GameBoard: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Scoreboard - Small side panel */}
-                        <div className="absolute bottom-4 right-4 pointer-events-auto group">
+                        {/* Scoreboard - Small side panel (Keep at bottom right) */}
+                        <div className="absolute bottom-4 -right-12 pointer-events-auto group">
                             <div className="w-10 h-10 bg-black/60 rounded-full border border-white/10 flex items-center justify-center hover:w-32 hover:rounded-xl transition-all overflow-hidden cursor-help">
                                 <span className="text-sm shrink-0">📊</span>
                                 <div className="hidden group-hover:flex flex-col ml-2 pr-2">
