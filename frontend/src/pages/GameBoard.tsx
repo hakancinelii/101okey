@@ -69,6 +69,7 @@ const GameBoard: React.FC = () => {
     const [finishData, setFinishData] = useState<{ reason: string, members: Member[], currentRound?: number, maxRounds?: number, isFinal?: boolean } | null>(null);
     const [isGameEnded, setIsGameEnded] = useState(false);
     const [currentRound, setCurrentRound] = useState(1);
+    const [isDrawing, setIsDrawing] = useState(false);
     const [maxRounds, setMaxRounds] = useState(3);
     const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -311,9 +312,11 @@ const GameBoard: React.FC = () => {
 
     // ----- Game actions -----------------------------------------------------
     const drawTile = async (targetSlotIdx?: number) => {
-        if (!socketRef.current) return;
-        if (hasDrawn) return; // prevent double-draw
+        if (!socketRef.current || hasDrawn || isDrawing) return;
+
+        setIsDrawing(true);
         socketRef.current.emit('drawTile', (tile?: Tile, err?: string) => {
+            setIsDrawing(false);
             if (err) { console.error('drawTile error', err); return; }
             if (tile) {
                 playSound(drawAudio);
@@ -353,12 +356,16 @@ const GameBoard: React.FC = () => {
     };
 
     const drawDiscard = async (targetSlotIdx?: number) => {
-        if (!socketRef.current || !lastDiscard) return;
+        if (!socketRef.current || !lastDiscard || hasDrawn || isDrawing) return;
+
+        setIsDrawing(true);
         socketRef.current.emit('drawDiscard', (tile?: Tile, err?: string) => {
+            setIsDrawing(false);
             if (err) return alert(err);
             if (tile) {
                 playSound(drawAudio);
                 setHand((prev) => [...prev, tile]);
+                setHasDrawn(true);
                 setRackSlots(prev => {
                     const next = [...prev];
                     const idx = (targetSlotIdx !== undefined && next[targetSlotIdx] === null) ? targetSlotIdx : next.indexOf(null);
