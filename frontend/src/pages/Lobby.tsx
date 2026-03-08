@@ -167,7 +167,7 @@ const Lobby: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-okey-table flex flex-col items-center justify-center p-6 text-white font-sans overflow-hidden">
+        <div className="min-h-screen bg-okey-table flex flex-col items-center justify-start p-4 sm:p-6 text-white font-sans overflow-y-auto no-scrollbar">
             {/* Ambient Background */}
             <div className="absolute top-0 inset-x-0 h-64 bg-gradient-to-b from-black/40 to-transparent"></div>
 
@@ -346,7 +346,7 @@ const Lobby: React.FC = () => {
                 </div>
 
                 {/* Right Side: Chat */}
-                <div className="glass-hud rounded-[40px] border border-white/10 flex flex-col overflow-hidden shadow-3xl h-[500px] lg:h-auto">
+                <div className="glass-hud rounded-[40px] border border-white/10 flex flex-col overflow-hidden shadow-3xl h-[400px] lg:h-auto lg:min-h-[500px]">
                     <div className="p-6 border-b border-white/5 bg-white/5 flex items-center justify-between">
                         <h3 className="text-sm font-black uppercase tracking-widest">{t('chat')}</h3>
                         <div className="flex space-x-1">
