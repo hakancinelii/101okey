@@ -1034,10 +1034,7 @@ export const initSocket = (httpServer: HttpServer) => {
             const gameSeed = gameId + '-' + Date.now() + '-' + roundNumber;
             let pool = shuffle(generateTilePool(gameSeed));
             const indicator = pool.pop();
-            const okeyTile = indicator ? {
-                ...indicator,
-                number: indicator.number === 13 ? 1 : indicator.number + 1
-            } : null;
+            const okeyTile = indicator;
 
             const { hands, remainingPool } = distributeTiles(pool, members.length);
 

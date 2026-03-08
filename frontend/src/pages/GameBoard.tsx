@@ -162,36 +162,20 @@ const GameBoard: React.FC = () => {
                 return next;
             });
 
-            if (state.deckCount !== undefined) setDeckCount(state.deckCount);
-            if (state.okeyTile) setOkeyTile(state.okeyTile);
-            if (state.turnIndex !== undefined) {
-                setTurnIndex(state.turnIndex);
-                if (state.remainingTime !== undefined) {
-                    setTimeRemaining(state.remainingTime);
-                } else if (turnIndex !== state.turnIndex) {
-                    setTimeRemaining(120);
-                }
-            }
+            setDeckCount(state.deckCount);
+            setOkeyTile(state.okeyTile);
+            setTurnIndex(state.turnIndex);
+
             if (state.members) {
-                const sortedMembers = [...state.members].sort((a: any, b: any) => a.seat - b.seat);
+                const sortedMembers = [...state.members].sort((a, b) => a.seat - b.seat);
+
+                // Deep sync to prevent duplicating openSets if already present
                 setMembers(sortedMembers);
             }
+            if (state.remainingTime !== undefined) setTimeRemaining(state.remainingTime);
             if (state.lastDiscard !== undefined) setLastDiscard(state.lastDiscard);
-
-            // Sync drawing and state flags from server if provided
             if (state.hasDrawn !== undefined) setHasDrawn(state.hasDrawn);
             if (state.mustOpen !== undefined) setMustOpen(state.mustOpen);
-
-            // Fallback sync drawing state: if turn is mine and I have 22 tiles, I must have drawn
-            const myInfo = getUserInfo();
-            if (state.turnIndex !== undefined && state.members) {
-                const myMember = Array.isArray(state.members) ? state.members.find((m: any) => m.userId === myInfo.userId) : null;
-                if (myMember && state.turnIndex === myMember.seat && state.hasDrawn === undefined) {
-                    if (state.hand) {
-                        setHasDrawn(state.hand.length > 21);
-                    }
-                }
-            }
         });
 
         // Receiving gameStarted event in GameBoard in case of re-connect or late emit
@@ -262,10 +246,21 @@ const GameBoard: React.FC = () => {
         socket.on('setPlaced', (data: { userId: string, tiles: Tile[], score: number }) => {
             setMembers(prev => prev.map(m => {
                 if (m.userId === data.userId) {
+                    const currentSets = m.openSets || [];
+                    const newTileIds = new Set(data.tiles.map(t => t.id));
+
+                    // Prevent duplicate sets (sometimes caused by re-syncs or double emissions)
+                    const bundleAlreadyExists = currentSets.some(s =>
+                        s.length === data.tiles.length &&
+                        s.every(t => newTileIds.has(t.id))
+                    );
+
+                    if (bundleAlreadyExists) return m;
+
                     return {
                         ...m,
                         openScore: (m.openScore || 0) + data.score,
-                        openSets: [...(m.openSets || []), data.tiles]
+                        openSets: [...currentSets, data.tiles]
                     };
                 }
                 return m;
@@ -787,9 +782,22 @@ const GameBoard: React.FC = () => {
 
     const renderOpenSetsArea = (player: Member | null) => {
         if (!player || !player.openSets || player.openSets.length === 0) return null;
+
+        // Ensure we only render unique sets (by tile IDs) to prevent UI glitch duplicates
+        const uniqueSets: Tile[][] = [];
+        const seenSetKeys = new Set<string>();
+
+        player.openSets.forEach((set: Tile[]) => {
+            const key = [...set].map(t => t.id).sort().join('|');
+            if (!seenSetKeys.has(key)) {
+                seenSetKeys.add(key);
+                uniqueSets.push(set);
+            }
+        });
+
         return (
-            <div className="flex flex-col flex-nowrap gap-2 justify-start items-center p-2 max-h-[140px] w-full overflow-y-auto no-scrollbar bg-black/30 rounded-2xl border border-white/5 backdrop-blur-sm shadow-xl">
-                {player.openSets.map((set: Tile[], sIdx: number) => (
+            <div className="flex flex-col flex-nowrap gap-2 justify-start items-center p-2 max-h-[160px] w-full overflow-y-auto no-scrollbar bg-black/30 rounded-2xl border border-white/5 backdrop-blur-sm shadow-xl relative z-10">
+                {uniqueSets.map((set: Tile[], sIdx: number) => (
                     <div
                         key={sIdx}
                         onClick={() => handleAddToSet(player.userId, sIdx)}
@@ -837,9 +845,9 @@ const GameBoard: React.FC = () => {
         const isActive = p && turnIndex === p.seat;
 
         const positionClasses = {
-            0: 'bottom-4 left-1/2 -translate-x-1/2 flex-col-reverse mb-32 sm:mb-40', // Shifted up more on mobile
+            0: 'bottom-4 left-1/2 -translate-x-1/2 flex-col-reverse mb-36 sm:mb-44', // Shifted up more on mobile to avoid shelves
             1: 'right-2 sm:right-6 top-1/2 -translate-y-1/2 flex-row-reverse',
-            2: 'top-2 sm:top-6 left-1/2 -translate-x-1/2 flex-col landscape:top-0', // Move top player more for landscape
+            2: 'top-1 sm:top-2 left-1/2 -translate-x-1/2 flex-col landscape:top-0 scale-90 sm:scale-100', // Move top player more for landscape
             3: 'left-2 sm:left-6 top-1/2 -translate-y-1/2 flex-row',
         }[relIdx] || '';
 
@@ -1195,8 +1203,9 @@ const GameBoard: React.FC = () => {
                                 <><span className="text-[10px] sm:text-xs font-black text-amber-500">101?</span><span className={`text-xs sm:text-sm font-black ${(() => {
                                     let total = 0;
                                     pendingSets.forEach(set => {
+                                        const jokerNumber = okeyTile ? (okeyTile.number % 13) + 1 : 0;
                                         // Normalize fake jokers for value
-                                        const normalizedNums = set.map(t => t.isFakeJoker ? (okeyTile?.number || 0) : t.number);
+                                        const normalizedNums = set.map(t => t.isFakeJoker ? jokerNumber : t.number);
                                         const normalizedColors = set.map(t => t.isFakeJoker ? (okeyTile?.color || '') : t.color);
 
                                         if (set.length < 3) return; // Invalid structure for series
@@ -1212,7 +1221,7 @@ const GameBoard: React.FC = () => {
                                             const has1 = normalizedNums.includes(1);
                                             const hasHigh = normalizedNums.includes(12) || normalizedNums.includes(13);
                                             if (has1 && hasHigh) {
-                                                total += set.reduce((abc, tile) => abc + (tile.isFakeJoker ? (okeyTile?.number || 0) : tile.number), 0);
+                                                total += set.reduce((abc, tile) => abc + (tile.isFakeJoker ? jokerNumber : tile.number), 0);
                                             } else {
                                                 total += normalizedNums.reduce((abc, n) => abc + n, 0);
                                             }
@@ -1223,7 +1232,8 @@ const GameBoard: React.FC = () => {
                                     let total = 0;
                                     pendingSets.forEach(set => {
                                         if (set.length < 3) return;
-                                        const normalizedNums = set.map(t => t.isFakeJoker ? (okeyTile?.number || 0) : t.number);
+                                        const jokerNumber = okeyTile ? (okeyTile.number % 13) + 1 : 0;
+                                        const normalizedNums = set.map(t => t.isFakeJoker ? jokerNumber : t.number);
                                         const normalizedColors = set.map(t => t.isFakeJoker ? (okeyTile?.color || '') : t.color);
                                         const isGroup = new Set(normalizedColors).size === set.length && normalizedNums.every(n => n === normalizedNums[0]);
                                         if (isGroup) total += normalizedNums[0] * set.length;
