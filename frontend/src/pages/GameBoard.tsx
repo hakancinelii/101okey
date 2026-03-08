@@ -227,6 +227,20 @@ const GameBoard: React.FC = () => {
             setTimeRemaining(120);
             setHasDrawn(false);
             setLastDrawnTileId(null);
+
+            // If turn changed and it's no longer my turn, return any pending sets to hand
+            // to avoid tiles getting "stuck" in the arrangement area
+            const myInfo = getUserInfo();
+            const myMember = members.find(m => m.userId === myInfo.userId);
+            if (myMember && data.turnIndex !== myMember.seat) {
+                setPendingSets(prev => {
+                    if (prev.length > 0) {
+                        const allPending = prev.flat();
+                        setHand(h => [...h, ...allPending]);
+                    }
+                    return [];
+                });
+            }
         });
 
         // Someone discarded a tile

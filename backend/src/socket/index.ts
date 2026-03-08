@@ -286,6 +286,12 @@ export const initSocket = (httpServer: HttpServer) => {
                 // AI-like discard for force move: discard the last tile (usually toughest to fit)
                 const discardedTile = currentHand.pop();
 
+                if (currentHand.length === 0) {
+                    console.log(`[ForceMove] User ${currentMember.userId} finished hand via timeout discard.`);
+                    await handleGameFinish(gameId, 'NORMAL_BITTI', currentMember.userId);
+                    return;
+                }
+
                 // Robust next turn calculation
                 const currIdx = members.findIndex(m => m.seat === game.turnIndex);
                 const nextMember = members[(currIdx + 1) % members.length];
