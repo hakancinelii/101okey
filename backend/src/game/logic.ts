@@ -45,19 +45,24 @@ export function distributeTiles(pool: Tile[], memberCount: number): { hands: Til
     return { hands, remainingPool: currentPool };
 }
 export function calculateSetScore(tiles: Tile[], okeyTile: Tile): { isValid: boolean, score: number, reason?: string } {
+    if (tiles.length === 2) {
+        if (isPair(tiles[0], tiles[1], okeyTile)) return { isValid: true, score: 0 };
+        return { isValid: false, score: 0, reason: 'INVALID_PAIR' };
+    }
     if (tiles.length < 3) return { isValid: false, score: 0, reason: 'SET_TOO_SHORT' };
 
+    const jokerNumber = (okeyTile.number % 13) + 1;
     // Normalize: Identify wildcards (Okeys) and normalize fake jokers
     const normalizedTiles = tiles.map(t => {
         // IMPORTANT: Fake Joker is NOT a wildcard. It's a tile that acts as the original tile displaced by the Okey.
-        const isWildcard = t.isJoker || (!t.isFakeJoker && t.color === okeyTile.color && t.number === okeyTile.number);
+        const isWildcard = t.isJoker || (!t.isFakeJoker && t.color === okeyTile.color && t.number === jokerNumber);
 
         let nColor = t.color;
         let nNumber = t.number;
 
         if (t.isFakeJoker) {
             nColor = okeyTile.color;
-            nNumber = okeyTile.number;
+            nNumber = jokerNumber;
         }
 
         return { ...t, nColor, nNumber, isWildcard };
@@ -169,17 +174,19 @@ function getSequenceScore(tiles: any[], okeyTile: Tile): { isValid: boolean, sco
 function isActuallyOkey(t: Tile, okey: Tile): boolean {
     if (t.isJoker) return true;
     if (t.isFakeJoker) return false; // Fake Jokers are NOT Okeys (wildcards)
-    return t.color === okey.color && t.number === okey.number;
+    const jokerNumber = (okey.number % 13) + 1;
+    return t.color === okey.color && t.number === jokerNumber;
 }
 
 function isPair(t1: Tile, t2: Tile, okeyTile: Tile): boolean {
     if (isActuallyOkey(t1, okeyTile) || isActuallyOkey(t2, okeyTile)) return true;
 
     // Normalize fake jokers
+    const jokerNumber = (okeyTile.number % 13) + 1;
     const c1 = t1.isFakeJoker ? okeyTile.color : t1.color;
-    const n1 = t1.isFakeJoker ? okeyTile.number : t1.number;
+    const n1 = t1.isFakeJoker ? jokerNumber : t1.number;
     const c2 = t2.isFakeJoker ? okeyTile.color : t2.color;
-    const n2 = t2.isFakeJoker ? okeyTile.number : t2.number;
+    const n2 = t2.isFakeJoker ? jokerNumber : t2.number;
 
     return c1 === c2 && n1 === n2;
 }
@@ -221,7 +228,8 @@ export function calculateHandPenalty(hand: Tile[], okeyTile: Tile, hasOpened: bo
         if (isActuallyOkey(t, okeyTile)) {
             total += 101;
         } else if (t.isFakeJoker) {
-            total += okeyTile.number;
+            const jokerNumber = (okeyTile.number % 13) + 1;
+            total += jokerNumber;
         } else {
             total += t.number;
         }
