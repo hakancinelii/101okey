@@ -1521,12 +1521,14 @@ export const initSocket = (httpServer: HttpServer) => {
                     const existingSets = ((member as any).openSets as any) || [];
                     const updatedOpenSets = [...existingSets, ...setsOfTiles];
 
+                    const combinedOpenScore = currentOpenScore + result.totalScore;
+
                     await prisma.gameMember.update({
                         where: { id: member.id },
                         data: {
                             hand: updatedHand,
                             openSets: updatedOpenSets as any,
-                            openScore: newTotalScore,
+                            openScore: combinedOpenScore,
                             mustOpen: false
                         } as any
                     });

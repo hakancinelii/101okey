@@ -70,6 +70,7 @@ const GameBoard: React.FC = () => {
     const [isGameEnded, setIsGameEnded] = useState(false);
     const [currentRound, setCurrentRound] = useState(1);
     const [isDrawing, setIsDrawing] = useState(false);
+    const [isPlacingSets, setIsPlacingSets] = useState(false);
     const [maxRounds, setMaxRounds] = useState(3);
     const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -397,13 +398,15 @@ const GameBoard: React.FC = () => {
     };
 
     const placeSets = async (sets: Tile[][]) => {
-        if (!socketRef.current || sets.length === 0) return;
+        if (!socketRef.current || sets.length === 0 || isPlacingSets) return;
 
+        setIsPlacingSets(true);
         // Optimistically clear pending sets to prevent double-submit synchronization errors
         const previousPending = [...pendingSets];
         setPendingSets([]);
 
         socketRef.current.emit('placeSets', sets.map(s => s.map(t => t.id)), (err?: string) => {
+            setIsPlacingSets(false);
             if (err) {
                 setPendingSets(previousPending);
                 return alert(err);
@@ -1183,7 +1186,48 @@ const GameBoard: React.FC = () => {
                             {pendingSets.length >= 5 && pendingSets.every(s => s.length === 2) ? (
                                 <><span className="text-[10px] sm:text-xs font-black text-blue-400">ÇİFT:</span><span className="text-xs sm:text-sm font-black text-green-400">{pendingSets.length}</span></>
                             ) : (
-                                <><span className="text-[10px] sm:text-xs font-black text-amber-500">101?</span><span className={`text-xs sm:text-sm font-black ${pendingSets.flat().reduce((acc, t) => acc + (t.number === 0 ? 0 : t.number), 0) >= 101 ? 'text-green-400' : 'text-white'}`}>{pendingSets.flat().reduce((acc, t) => acc + (t.number === 0 ? 0 : t.number), 0)}</span></>
+                                <><span className="text-[10px] sm:text-xs font-black text-amber-500">101?</span><span className={`text-xs sm:text-sm font-black ${(() => {
+                                    let total = 0;
+                                    const jokerNumber = okeyTile ? (okeyTile.number % 13) + 1 : -1;
+                                    pendingSets.forEach(set => {
+                                        const nonWildcards = set.filter(t => !((t.color === okeyTile?.color && t.number === jokerNumber) || t.isJoker || t.isFakeJoker));
+                                        if (nonWildcards.length > 0) {
+                                            // Simple heuristic for UI: if it's a group, use base * length. 
+                                            // If it's a run, use sum.
+                                            const isGroup = new Set(nonWildcards.map(t => t.color)).size === nonWildcards.length && nonWildcards.every(t => t.number === nonWildcards[0].number);
+                                            if (isGroup) {
+                                                total += nonWildcards[0].number * set.length;
+                                            } else {
+                                                // Seq sum
+                                                set.forEach(t => {
+                                                    if (t.isFakeJoker) total += okeyTile?.number || 0;
+                                                    else if (t.isJoker || (t.color === okeyTile?.color && t.number === jokerNumber)) {
+                                                        // Estimate joker value in seq... complicated for UI. Just sum the numbers for now but better than before.
+                                                        total += t.number;
+                                                    } else total += t.number;
+                                                });
+                                            }
+                                        } else if (set.length > 0) {
+                                            // All jokers? (edge case)
+                                            total += (okeyTile?.number || 0) * set.length;
+                                        }
+                                    });
+                                    return total;
+                                })() >= 101 ? 'text-green-400' : 'text-white'}`}>{(() => {
+                                    let total = 0;
+                                    const jokerNumber = okeyTile ? (okeyTile.number % 13) + 1 : -1;
+                                    pendingSets.forEach(set => {
+                                        const nonWildcards = set.filter(t => !((t.color === okeyTile?.color && t.number === jokerNumber) || t.isJoker || t.isFakeJoker));
+                                        if (nonWildcards.length > 0) {
+                                            const isGroup = new Set(nonWildcards.map(t => t.color)).size === nonWildcards.length && nonWildcards.every(t => t.number === nonWildcards[0].number);
+                                            if (isGroup) total += nonWildcards[0].number * set.length;
+                                            else total += set.reduce((abc, tile) => abc + (tile.isFakeJoker ? (okeyTile?.number || 0) : tile.number), 0);
+                                        } else if (set.length > 0) {
+                                            total += (okeyTile?.number || 0) * set.length;
+                                        }
+                                    });
+                                    return total;
+                                })()}</span></>
                             )}
                         </div>
                         <div className="w-[1px] h-3 sm:h-4 bg-white/20"></div>
