@@ -192,4 +192,120 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  /* Better Touch Interactions */
+  .pointer-events-auto {
+    touch-action: none;
+  }
+
+  /* Mobile Responsive & Landscape Enforcement */
+  @media screen and (max-width: 1024px) {
+    .table-surface {
+      border-width: 6px;
+      border-radius: 40px;
+    }
+
+    .btn-premium {
+      @apply rounded-lg;
+    }
+  }
+
+  /* Landscape Suggestion for small screens */
+  @media screen and (max-width: 768px) and (orientation: portrait) {
+    body::before {
+      content: 'Lütfen oyunu yan çevirerek oynayınız 📱';
+      position: fixed;
+      inset: 0;
+      background: #06402b;
+      color: white;
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      padding: 2rem;
+      text-align: center;
+      font-size: 1.25rem;
+    }
+
+    #root {
+      display: none;
+    }
+  }
+
+  /* Tablet & Small Laptop Scaling */
+  @media screen and (max-height: 800px) {
+    .h-52 {
+      height: 11rem;
+    }
+
+    .h-40 {
+      height: 9rem;
+    }
+
+    .w-\[48px\] {
+      width: 42px;
+    }
+
+    .h-\[68px\] {
+      height: 60px;
+    }
+
+    .table-surface {
+      border-radius: 60px;
+    }
+  }
+
+  /* Mobile Landscape Scale Down */
+  @media screen and (max-height: 500px) {
+    .h-52 {
+      height: 9rem;
+    }
+
+    .h-40 {
+      height: 7.5rem;
+    }
+
+    .w-\[48px\] {
+      width: 36px;
+    }
+
+    .h-\[68px\] {
+      height: 50px;
+    }
+
+    .btn-premium {
+      @apply py-1 px-3;
+    }
+
+    .w-14 {
+      width: 3rem;
+    }
+
+    .h-14 {
+      height: 3rem;
+    }
+
+    .text-2xl {
+      font-size: 1.25rem;
+    }
+
+    .text-3xl {
+      font-size: 1.5rem;
+    }
+
+    .table-surface {
+      border-radius: 30px;
+    }
+
+    .p-8 {
+      padding: 1rem;
+    }
+
+    .glass-hud {
+      height: 3rem;
+    }
+  }
 }

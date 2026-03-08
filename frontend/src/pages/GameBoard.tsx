@@ -1118,9 +1118,9 @@ const GameBoard: React.FC = () => {
 
                 {/* Bottom HUD - Flanking player avatar (Moved to bottom edges to avoid overlapping open sets) */}
                 {/* Deck - Left Side */}
-                <div className="absolute bottom-4 left-[2%] sm:left-[5%] md:left-[10%] xl:left-[15%] z-40 pointer-events-auto">
+                <div className="absolute bottom-4 left-[2%] sm:left-[5%] md:left-[10%] xl:left-[15%] z-40 pointer-events-auto scale-75 sm:scale-100">
                     <div className="flex flex-col items-center bg-black/60 px-6 py-5 rounded-3xl border border-white/10 backdrop-blur-md shadow-2xl transform -rotate-2">
-                        <span className="text-[9px] uppercase font-black opacity-30 mb-2 tracking-widest text-white whitespace-nowrap">{t('deckLabel')}</span>
+                        <span className="text-[9px] uppercase font-black opacity-30 mb-2 tracking-widest text-white whitespace-nowrap hidden sm:block">{t('deckLabel')}</span>
                         <div className={`relative group ${hasDrawn || !isMyTurn ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
                             onClick={() => { if (!hasDrawn && isMyTurn) drawTile(); }}
                         >
@@ -1133,14 +1133,15 @@ const GameBoard: React.FC = () => {
                 </div>
 
                 {/* Okey Tile - Right Side */}
-                <div className="absolute bottom-4 right-[2%] sm:right-[5%] md:right-[10%] xl:right-[15%] z-40 pointer-events-auto flex gap-4 items-end">
+                <div className="absolute bottom-4 right-[2%] sm:right-[5%] md:right-[10%] xl:right-[15%] z-40 pointer-events-auto flex gap-4 items-end scale-75 sm:scale-100">
                     <div className="flex flex-col items-center glass-hud py-3 px-4 rounded-2xl border border-white/10 bg-black/60 shadow-2xl transform rotate-2">
-                        <span className="text-[9px] uppercase font-black opacity-30 mb-2 tracking-widest text-amber-500 whitespace-nowrap">{t('okeyTile')}</span>
+                        <span className="text-[9px] uppercase font-black opacity-30 mb-2 tracking-widest text-amber-500 whitespace-nowrap hidden sm:block">{t('okeyTile')}</span>
                         <div className="scale-110">{okeyTile && renderTile(okeyTile)}</div>
                     </div>
                     {/* Stats Button */}
-                    <div className="relative group pb-2">
+                    <div className="relative group pb-2 hidden md:block">
                         <div className="w-10 h-10 bg-black/60 rounded-full border border-white/10 flex items-center justify-center hover:w-32 hover:rounded-xl transition-all overflow-hidden cursor-help shadow-2xl">
+
                             <span className="text-sm shrink-0">📊</span>
                             <div className="hidden group-hover:flex flex-col ml-2 pr-2">
                                 {members.slice(0, 4).map(m => (
@@ -1176,17 +1177,17 @@ const GameBoard: React.FC = () => {
             {/* Bottom Section: Rack & Controls */}
             <div className="h-52 w-full flex flex-col items-center justify-end px-4 relative pb-2 overflow-visible">
                 {/* HUD Info Area Above Rack */}
-                <div className="absolute -top-12 left-1/2 -translate-x-1/2 flex items-center space-x-4 z-40">
-                    <div className="bg-black/60 px-5 py-2 rounded-full backdrop-blur-md border border-white/10 flex items-center space-x-6 shadow-2xl">
+                <div className="absolute -top-10 sm:-top-12 left-1/2 -translate-x-1/2 flex items-center space-x-4 z-40">
+                    <div className="bg-black/60 px-3 sm:px-5 py-1.5 sm:py-2 rounded-full backdrop-blur-md border border-white/10 flex items-center space-x-3 sm:space-x-6 shadow-2xl">
                         <div className="flex items-center space-x-1">
                             {pendingSets.length >= 5 && pendingSets.every(s => s.length === 2) ? (
-                                <><span className="text-xs font-black text-blue-400">ÇİFT:</span><span className="text-sm font-black text-green-400">{pendingSets.length}</span></>
+                                <><span className="text-[10px] sm:text-xs font-black text-blue-400">ÇİFT:</span><span className="text-xs sm:text-sm font-black text-green-400">{pendingSets.length}</span></>
                             ) : (
-                                <><span className="text-xs font-black text-amber-500">101?</span><span className={`text-sm font-black ${pendingSets.flat().reduce((acc, t) => acc + (t.number === 0 ? 0 : t.number), 0) >= 101 ? 'text-green-400' : 'text-white'}`}>{pendingSets.flat().reduce((acc, t) => acc + (t.number === 0 ? 0 : t.number), 0)}</span></>
+                                <><span className="text-[10px] sm:text-xs font-black text-amber-500">101?</span><span className={`text-xs sm:text-sm font-black ${pendingSets.flat().reduce((acc, t) => acc + (t.number === 0 ? 0 : t.number), 0) >= 101 ? 'text-green-400' : 'text-white'}`}>{pendingSets.flat().reduce((acc, t) => acc + (t.number === 0 ? 0 : t.number), 0)}</span></>
                             )}
                         </div>
-                        <div className="w-[1px] h-4 bg-white/20"></div>
-                        <span className={`text-[10px] font-black uppercase tracking-widest ${isMyTurn ? 'text-green-400 animate-pulse' : 'text-white/40'}`}>
+                        <div className="w-[1px] h-3 sm:h-4 bg-white/20"></div>
+                        <span className={`text-[8px] sm:text-[10px] font-black uppercase tracking-widest ${isMyTurn ? 'text-green-400 animate-pulse' : 'text-white/40'}`}>
                             {isMyTurn ? t('yourTurnMsg') : t('opponentTurnMsg')}
                         </span>
                     </div>
@@ -1194,13 +1195,13 @@ const GameBoard: React.FC = () => {
 
                 <div className="w-full max-w-[1300px] flex items-center justify-center space-x-4">
                     {/* Controls Left */}
-                    <div className="flex flex-col space-y-3 mr-6">
-                        <div className="flex flex-col space-y-2">
-                            <span className="text-[9px] font-black opacity-30 text-center uppercase tracking-widest">DİZİLİM</span>
-                            <button onClick={sortSeri} className="w-12 h-12 btn-premium btn-blue flex flex-col items-center justify-center group"><span className="text-lg group-hover:scale-110 transition-transform">🪜</span><span className="text-[8px] font-black uppercase mt-0.5">SERİ</span></button>
-                            <button onClick={sortCift} className="w-12 h-12 btn-premium btn-blue flex flex-col items-center justify-center group"><span className="text-lg group-hover:scale-110 transition-transform">👥</span><span className="text-[8px] font-black uppercase mt-0.5">ÇİFT</span></button>
+                    <div className="flex flex-col space-y-2 sm:space-y-3 mr-2 sm:mr-6">
+                        <div className="flex flex-col space-y-1 sm:space-y-2">
+                            <span className="text-[7px] sm:text-[9px] font-black opacity-30 text-center uppercase tracking-widest hidden sm:block">DİZİLİM</span>
+                            <button onClick={sortSeri} className="w-10 h-10 sm:w-12 sm:h-12 btn-premium btn-blue flex flex-col items-center justify-center group"><span className="text-base sm:text-lg group-hover:scale-110 transition-transform">🪜</span><span className="text-[7px] sm:text-[8px] font-black uppercase mt-0.5">SERİ</span></button>
+                            <button onClick={sortCift} className="w-10 h-10 sm:w-12 sm:h-12 btn-premium btn-blue flex flex-col items-center justify-center group"><span className="text-base sm:text-lg group-hover:scale-110 transition-transform">👥</span><span className="text-[7px] sm:text-[8px] font-black uppercase mt-0.5">ÇİFT</span></button>
                         </div>
-                        <button onClick={undoDrawDiscard} disabled={!mustOpen} className={`w-12 h-10 btn-premium btn-red flex flex-col items-center justify-center transition-all ${!mustOpen ? 'opacity-20 grayscale' : 'animate-pulse'}`}><span className="text-xs">↩</span><span className="text-[7px] font-black uppercase">GERİ</span></button>
+                        <button onClick={undoDrawDiscard} disabled={!mustOpen} className={`w-10 h-8 sm:w-12 sm:h-10 btn-premium btn-red flex flex-col items-center justify-center transition-all ${!mustOpen ? 'opacity-20 grayscale' : 'animate-pulse'}`}><span className="text-[10px] sm:text-xs">↩</span><span className="text-[6px] sm:text-[7px] font-black uppercase">GERİ</span></button>
                     </div>
 
                     {/* Wooden İsteka (Rack) */}
@@ -1227,20 +1228,20 @@ const GameBoard: React.FC = () => {
                     </div>
 
                     {/* Controls Right */}
-                    <div className="flex flex-col space-y-3 ml-4">
-                        <div className="flex flex-col space-y-1.5">
-                            <span className="text-[9px] font-black opacity-40 text-center uppercase tracking-widest leading-none mb-1">HAMLE</span>
-                            <div className="flex flex-col gap-2">
-                                <button onClick={addGroup} className="w-14 h-14 btn-premium btn-green border-2 border-green-400/30 flex flex-col items-center justify-center group shadow-xl"><span className="text-2xl group-hover:scale-110 transition-transform">📦</span><span className="text-[9px] font-black uppercase mt-1">{t('addGroup')}</span></button>
+                    <div className="flex flex-col space-y-2 sm:space-y-3 ml-2 sm:ml-4">
+                        <div className="flex flex-col space-y-1 sm:space-y-1.5">
+                            <span className="text-[7px] sm:text-[9px] font-black opacity-40 text-center uppercase tracking-widest leading-none mb-1 hidden sm:block">HAMLE</span>
+                            <div className="flex flex-col gap-1.5 sm:gap-2">
+                                <button onClick={addGroup} className="w-11 h-11 sm:w-14 sm:h-14 btn-premium btn-green border-2 border-green-400/30 flex flex-col items-center justify-center group shadow-xl"><span className="text-xl sm:text-2xl group-hover:scale-110 transition-transform">📦</span><span className="text-[7.5px] sm:text-[9px] font-black uppercase mt-0.5 sm:mt-1">{t('addGroup')}</span></button>
                                 <button onClick={async () => { if (pendingSets.length === 0) return alert(t('noSetsToOpen')); await placeSets(pendingSets); }}
-                                    className="w-14 h-14 btn-premium btn-amber border-2 border-amber-400/30 flex flex-col items-center justify-center group shadow-xl"><span className="text-2xl group-hover:scale-110 transition-transform">📤</span><span className="text-[9px] font-black uppercase mt-1">{t('placeOnTable')}</span></button>
+                                    className="w-11 h-11 sm:w-14 sm:h-14 btn-premium btn-amber border-2 border-amber-400/30 flex flex-col items-center justify-center group shadow-xl"><span className="text-xl sm:text-2xl group-hover:scale-110 transition-transform">📤</span><span className="text-[7.5px] sm:text-[9px] font-black uppercase mt-0.5 sm:mt-1">{t('placeOnTable')}</span></button>
                             </div>
                         </div>
-                        <div className="flex flex-col space-y-1.5">
-                            <span className="text-[9px] font-black opacity-40 text-center uppercase tracking-widest leading-none mb-1">BİTİR</span>
+                        <div className="flex flex-col space-y-1 sm:space-y-1.5">
+                            <span className="text-[7px] sm:text-[9px] font-black opacity-40 text-center uppercase tracking-widest leading-none mb-1 hidden sm:block">BİTİR</span>
                             <button id="discard-zone-btn"
                                 onClick={async () => { if (selectedTileIds.size !== 1) return alert(t('selectOneToDiscard')); await discardTile([...selectedTileIds][0]); setSelectedTileIds(new Set()); }}
-                                className="w-14 h-14 btn-premium btn-red border-2 border-red-400/30 flex flex-col items-center justify-center group shadow-xl"><span className="text-2xl group-hover:-translate-y-1 transition-transform">🗑️</span><span className="font-black text-[10px] mt-1 uppercase">{t('discardAction')}</span></button>
+                                className="w-11 h-11 sm:w-14 sm:h-14 btn-premium btn-red border-2 border-red-400/30 flex flex-col items-center justify-center group shadow-xl"><span className="text-xl sm:text-2xl group-hover:-translate-y-1 transition-transform">🗑️</span><span className="font-black text-[8px] sm:text-[10px] mt-0.5 sm:mt-1 uppercase">{t('discardAction')}</span></button>
                         </div>
                     </div>
                 </div>
