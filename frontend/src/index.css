@@ -241,12 +241,14 @@
       height: 8.5rem;
     }
 
+    .w-\[32px\],
     .w-\[48px\] {
-      width: 40px;
+      width: 40px !important;
     }
 
+    .h-\[48px\],
     .h-\[68px\] {
-      height: 56px;
+      height: 56px !important;
     }
 
     .tile-3d {
@@ -260,71 +262,95 @@
   }
 
   /* Mobile Landscape Scale Down */
-  @media screen and (max-height: 500px),
+  @media screen and (max-height: 480px),
   screen and (max-width: 1100px) {
     .h-40 {
-      height: 7rem;
+      height: 6.5rem !important;
     }
 
+    .w-\[32px\],
     .w-\[48px\] {
-      width: 36px;
-    }
-
-    .h-\[68px\] {
-      height: 48px;
-    }
-
-    .tile-3d {
       width: 32px !important;
+    }
+
+    .h-\[48px\],
+    .h-\[68px\] {
       height: 44px !important;
     }
 
-    .tile-3d span {
-      font-size: 14px !important;
+    .tile-3d {
+      width: 28px !important;
+      height: 40px !important;
     }
 
+    .tile-3d span {
+      font-size: 13px !important;
+    }
+
+    .tile-3d div {
+      width: 4px !important;
+      height: 4px !important;
+    }
+
+    .gap-0\.5,
     .gap-1 {
-      gap: 2px !important;
+      gap: 1px !important;
     }
 
     /* Side Buttons scaling */
-    .w-11,
+    .w-9,
+    .w-10,
     .w-14 {
-      width: 2.5rem !important;
-      height: 2.5rem !important;
+      width: 2.2rem !important;
+      height: 2.2rem !important;
     }
 
-    .sm\:w-14,
-    .sm\:h-14 {
-      width: 2.5rem !important;
-      height: 2.5rem !important;
+    .h-7,
+    .h-8,
+    .h-9,
+    .h-10,
+    .h-14 {
+      height: 2.2rem !important;
     }
 
+    .btn-premium span.text-sm,
+    .btn-premium span.text-lg,
     .btn-premium span.text-xl,
     .btn-premium span.text-2xl {
-      font-size: 1.1rem !important;
+      font-size: 0.9rem !important;
     }
 
-    .text-\[7\.5px\],
+    .text-\[6px\],
+    .text-\[7px\],
     .text-\[8px\],
-    .text-\[9px\] {
-      font-size: 7px !important;
+    .text-\[9px\],
+    .text-\[10px\] {
+      font-size: 6px !important;
+    }
+
+    /* Player Avatar scaling */
+    .w-24,
+    .h-24 {
+      width: 4.5rem !important;
+      height: 4.5rem !important;
     }
   }
 
   /* Ultra narrow landscape scaling */
   @media screen and (max-width: 850px) and (orientation: landscape) {
+
+    .w-\[32px\],
     .w-\[48px\] {
-      width: 30px;
+      width: 28px !important;
     }
 
     .tile-3d {
-      width: 26px !important;
-      height: 38px !important;
+      width: 24px !important;
+      height: 34px !important;
     }
 
     .tile-3d span {
-      font-size: 12px !important;
+      font-size: 11px !important;
     }
   }
 }

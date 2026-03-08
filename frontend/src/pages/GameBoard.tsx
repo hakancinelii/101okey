@@ -729,7 +729,7 @@ const GameBoard: React.FC = () => {
                         return next;
                     });
                 }}
-                className={`tile-3d w-11 h-16 rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all border border-amber-200/50 
+                className={`tile-3d w-9 h-12 sm:w-11 sm:h-16 rounded-lg sm:rounded-xl flex flex-col items-center justify-center cursor-pointer transition-all border border-amber-200/50 
                     ${isSelected ? 'selected' : ''} 
                     ${isNewlyDrawn ? 'ring-2 ring-green-400 shadow-[0_0_12px_rgba(74,222,128,0.6)] -translate-y-1' : ''}
                     ${isOkey ? 'ring-2 ring-amber-400 animate-okey-glow shadow-lg' : ''} 
@@ -832,26 +832,31 @@ const GameBoard: React.FC = () => {
         );
     };
 
-    const PlayerSpot: React.FC<{ player: Member | null; isTurn: boolean; relativePos: number }> = ({ player, isTurn, relativePos }) => {
+    const PlayerSpot = ({ relIdx }: { relIdx: number }) => {
+        const p = getPlayerByRelativePos(relIdx);
+        const isActive = p && turnIndex === p.seat;
+
+        const positionClasses = {
+            0: 'bottom-4 left-1/2 -translate-x-1/2 flex-col-reverse mb-32 sm:mb-40', // Shifted up more on mobile
+            1: 'right-2 sm:right-6 top-1/2 -translate-y-1/2 flex-row-reverse',
+            2: 'top-2 sm:top-6 left-1/2 -translate-x-1/2 flex-col landscape:top-0', // Move top player more for landscape
+            3: 'left-2 sm:left-6 top-1/2 -translate-y-1/2 flex-row',
+        }[relIdx] || '';
+
         return (
-            <div className={`absolute flex flex-col items-center pointer-events-auto transition-all duration-700 z-50
-                ${relativePos === 0 ? 'bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 mb-4' : ''}
-                ${relativePos === 1 ? 'right-0 top-1/2 -translate-y-1/2 translate-x-1/2 mr-4' : ''}
-                ${relativePos === 2 ? 'top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 mt-4 flex-col-reverse' : ''}
-                ${relativePos === 3 ? 'left-0 top-1/2 -translate-y-1/2 -translate-x-1/2 ml-4' : ''}`}
-            >
+            <div className={`absolute flex items-center pointer-events-auto transition-all duration-700 z-50 ${positionClasses}`}>
                 <div className="relative">
                     {/* Turn Glow Effect */}
                     <div className={`absolute -inset-6 bg-gradient-to-r from-amber-500/10 to-orange-500/10 rounded-full blur-2xl transition-all duration-700
-                        ${isTurn ? 'opacity-100 scale-125 animate-pulse' : 'opacity-0 scale-90'}`} />
+                        ${isActive ? 'opacity-100 scale-125 animate-pulse' : 'opacity-0 scale-90'}`} />
 
                     {/* Avatar Container */}
                     <div className={`relative w-24 h-24 rounded-full p-1 transition-all duration-500 transform
-                        ${isTurn ? 'scale-110' : 'opacity-80'}`}
+                        ${isActive ? 'scale-110' : 'opacity-80'}`}
                     >
                         <div className="w-full h-full rounded-full bg-slate-900 flex items-center justify-center overflow-hidden border-2 border-white/10 relative z-20">
-                            {player ? (
-                                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${player.userId}`} alt="Avatar" className="w-full h-full object-cover" />
+                            {p ? (
+                                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${p.userId}`} alt="Avatar" className="w-full h-full object-cover" />
                             ) : (
                                 <div className="w-full h-full bg-white/5 flex items-center justify-center">
                                     <span className="text-white/20 text-4xl font-black">?</span>
@@ -860,21 +865,21 @@ const GameBoard: React.FC = () => {
                         </div>
 
                         {/* Circular Progress Timer (Full Wrap) */}
-                        {isTurn && <CircularTimer time={timeRemaining} max={120} />}
+                        {isActive && <CircularTimer time={timeRemaining} max={120} />}
                     </div>
                 </div>
 
-                <div className={`${relativePos === 2 ? 'mb-4' : 'mt-4'} flex flex-col items-center z-30`}>
+                <div className={`${relIdx === 2 ? 'mb-4' : 'mt-4'} flex flex-col items-center z-30`}>
                     <div className={`px-4 py-1.5 rounded-full backdrop-blur-md border transition-all duration-500
-                        ${isTurn ? 'bg-amber-500/90 border-amber-300 shadow-lg scale-110' : 'bg-black/40 border-white/5'}`}
+                        ${isActive ? 'bg-amber-500/90 border-amber-300 shadow-lg scale-110' : 'bg-black/40 border-white/5'}`}
                     >
-                        <span className={`text-[10px] font-black uppercase tracking-widest ${isTurn ? 'text-black' : 'text-white/80'}`}>
-                            {player ? player.name : 'Bekleniyor...'}
+                        <span className={`text-[10px] font-black uppercase tracking-widest ${isActive ? 'text-black' : 'text-white/80'}`}>
+                            {p ? p.name : 'Bekleniyor...'}
                         </span>
                     </div>
-                    {player && (
+                    {p && (
                         <div className="mt-1 px-3 py-0.5 bg-black/30 rounded-full border border-white/10 shadow-lg">
-                            <span className="text-[10px] font-black text-amber-500">{player.penaltyScore || 0}</span>
+                            <span className="text-[10px] font-black text-amber-500">{p.penaltyScore || 0}</span>
                         </div>
                     )}
                 </div>
@@ -1019,23 +1024,23 @@ const GameBoard: React.FC = () => {
             </div>
 
             {/* Main Game Area */}
-            <div className="flex-1 relative flex items-center justify-center p-8 overflow-hidden">
+            <div className="flex-1 relative flex items-center justify-center p-2 sm:p-8 overflow-hidden">
                 {/* Drag-to-discard visual hints */}
                 {draggingIdx !== null && draggingIdx >= 0 && (
                     <>
-                        <div className={`absolute top-0 left-0 right-0 h-28 z-[100] flex items-center justify-center transition-all duration-200 pointer-events-none
+                        <div className={`absolute top-0 left-0 right-0 h-20 sm:h-28 z-[100] flex items-center justify-center transition-all duration-200 pointer-events-none
                             ${dragPos.y < -80 ? 'bg-red-500/40 border-b-4 border-red-400 shadow-[0_0_40px_rgba(239,68,68,0.5)]' : 'bg-red-500/10 border-b-2 border-dashed border-red-500/30'}`}>
-                            <span className="text-red-300 text-xs font-black tracking-widest uppercase flex items-center gap-2">↑ AT</span>
+                            <span className="text-red-300 text-[10px] sm:text-xs font-black tracking-widest uppercase flex items-center gap-2">↑ AT</span>
                         </div>
-                        <div className={`absolute top-0 right-0 bottom-0 w-28 z-[100] flex items-center justify-center transition-all duration-200 pointer-events-none
+                        <div className={`absolute top-0 right-0 bottom-0 w-20 sm:w-28 z-[100] flex items-center justify-center transition-all duration-200 pointer-events-none
                             ${dragPos.x > 120 ? 'bg-red-500/40 border-l-4 border-red-400 shadow-[0_0_40px_rgba(239,68,68,0.5)]' : 'bg-red-500/10 border-l-2 border-dashed border-red-500/30'}`}>
-                            <span className="text-red-300 text-xs font-black tracking-widest uppercase flex items-center gap-2 [writing-mode:vertical-lr]">→ AT</span>
+                            <span className="text-red-300 text-[10px] sm:text-xs font-black tracking-widest uppercase flex items-center gap-2 [writing-mode:vertical-lr]">→ AT</span>
                         </div>
                     </>
                 )}
 
                 {/* Table Surface - The Green Play Area */}
-                <div className="w-[88%] h-[78%] table-surface rounded-[80px] relative shadow-[0_40px_100px_rgba(0,0,0,0.6)] border-4 border-white/5">
+                <div className="w-full h-full max-w-[1400px] max-h-[850px] rounded-[120px] shadow-4xl flex items-center justify-center relative landscape:max-h-[70vh]">
                     {/* Table quadrants for Opened Sets - Positioned in front of players */}
                     <div className="absolute inset-0 z-10 pointer-events-none p-4 lg:p-8">
                         <div className="grid grid-cols-3 grid-rows-3 w-full h-full gap-4">
@@ -1114,10 +1119,10 @@ const GameBoard: React.FC = () => {
 
                 {/* Player Avatars - Outside the green table */}
                 <div className="absolute inset-0 max-w-7xl mx-auto pointer-events-none z-30">
-                    <PlayerSpot player={getPlayerByRelativePos(0)} isTurn={turnIndex === (getPlayerByRelativePos(0)?.seat ?? -1)} relativePos={0} />
-                    <PlayerSpot player={getPlayerByRelativePos(1)} isTurn={turnIndex === (getPlayerByRelativePos(1)?.seat ?? -1)} relativePos={1} />
-                    <PlayerSpot player={getPlayerByRelativePos(2)} isTurn={turnIndex === (getPlayerByRelativePos(2)?.seat ?? -1)} relativePos={2} />
-                    <PlayerSpot player={getPlayerByRelativePos(3)} isTurn={turnIndex === (getPlayerByRelativePos(3)?.seat ?? -1)} relativePos={3} />
+                    <PlayerSpot relIdx={0} />
+                    <PlayerSpot relIdx={1} />
+                    <PlayerSpot relIdx={2} />
+                    <PlayerSpot relIdx={3} />
                 </div>
 
                 {/* Bottom HUD - Flanking player avatar (Moved to bottom edges to avoid overlapping open sets) */}
@@ -1235,34 +1240,34 @@ const GameBoard: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="w-full max-w-[1300px] flex items-center justify-center space-x-4">
+                <div className="w-full max-w-[1300px] flex items-center justify-center space-x-2 sm:space-x-4 mb-2 sm:mb-0">
                     {/* Controls Left */}
-                    <div className="flex flex-col space-y-2 sm:space-y-3 mr-2 sm:mr-6">
+                    <div className="flex flex-col space-y-1.5 sm:space-y-3 mr-1 sm:mr-6">
                         <div className="flex flex-col space-y-1 sm:space-y-2">
                             <span className="text-[7px] sm:text-[9px] font-black opacity-30 text-center uppercase tracking-widest hidden sm:block">DİZİLİM</span>
-                            <button onClick={sortSeri} className="w-10 h-10 sm:w-12 sm:h-12 btn-premium btn-blue flex flex-col items-center justify-center group"><span className="text-base sm:text-lg group-hover:scale-110 transition-transform">🪜</span><span className="text-[7px] sm:text-[8px] font-black uppercase mt-0.5">SERİ</span></button>
-                            <button onClick={sortCift} className="w-10 h-10 sm:w-12 sm:h-12 btn-premium btn-blue flex flex-col items-center justify-center group"><span className="text-base sm:text-lg group-hover:scale-110 transition-transform">👥</span><span className="text-[7px] sm:text-[8px] font-black uppercase mt-0.5">ÇİFT</span></button>
+                            <button onClick={sortSeri} className="w-9 h-9 sm:w-12 sm:h-12 btn-premium btn-blue flex flex-col items-center justify-center group"><span className="text-sm sm:text-lg group-hover:scale-110 transition-transform">🪜</span><span className="text-[6px] sm:text-[8px] font-black uppercase mt-0.5">SERİ</span></button>
+                            <button onClick={sortCift} className="w-9 h-9 sm:w-12 sm:h-12 btn-premium btn-blue flex flex-col items-center justify-center group"><span className="text-sm sm:text-lg group-hover:scale-110 transition-transform">👥</span><span className="text-[6px] sm:text-[8px] font-black uppercase mt-0.5">ÇİFT</span></button>
                         </div>
-                        <button onClick={undoDrawDiscard} disabled={!mustOpen} className={`w-10 h-8 sm:w-12 sm:h-10 btn-premium btn-red flex flex-col items-center justify-center transition-all ${!mustOpen ? 'opacity-20 grayscale' : 'animate-pulse'}`}><span className="text-[10px] sm:text-xs">↩</span><span className="text-[6px] sm:text-[7px] font-black uppercase">GERİ</span></button>
+                        <button onClick={undoDrawDiscard} disabled={!mustOpen} className={`w-9 h-7 sm:w-12 sm:h-10 btn-premium btn-red flex flex-col items-center justify-center transition-all ${!mustOpen ? 'opacity-20 grayscale' : 'animate-pulse'}`}><span className="text-[10px] sm:text-xs">↩</span><span className="text-[6px] sm:text-[7px] font-black uppercase">GERİ</span></button>
                     </div>
 
                     {/* Wooden İsteka (Rack) */}
-                    <div className="relative flex-1 max-w-[1100px] h-40 bg-isteka rounded-2xl p-4 flex flex-col justify-between shadow-[0_20px_50px_rgba(0,0,0,0.8)] border-t-2 border-white/20">
-                        <div className="isteka-row w-full flex items-center justify-center gap-1">
+                    <div className="relative flex-1 max-w-[1100px] h-32 sm:h-40 bg-isteka rounded-xl sm:rounded-2xl p-2 sm:p-4 flex flex-col justify-between shadow-[0_20px_50px_rgba(0,0,0,0.8)] border-t-2 border-white/20">
+                        <div className="isteka-row w-full flex items-center justify-center gap-0.5 sm:gap-1">
                             {rackSlots.slice(0, 22).map((tile, i) => (
-                                <div key={i} data-slot-idx={i} className={`w-[48px] h-[68px] flex items-center justify-center relative ${draggingIdx !== null ? 'hover:bg-white/5 rounded-lg' : ''}`}>
+                                <div key={i} data-slot-idx={i} className={`w-[32px] sm:w-[48px] h-[48px] sm:h-[68px] flex items-center justify-center relative ${draggingIdx !== null ? 'hover:bg-white/5 rounded-lg' : ''}`}>
                                     {tile && renderGameTile(tile, () => toggleTileSelection(tile.id), i)}
-                                    {!tile && <div className="absolute inset-1 border border-dashed border-white/5 rounded-lg pointer-events-none"></div>}
+                                    {!tile && <div className="absolute inset-0.5 border border-dashed border-white/5 rounded-lg pointer-events-none"></div>}
                                 </div>
                             ))}
                         </div>
-                        <div className="isteka-row w-full flex items-center justify-center gap-1">
+                        <div className="isteka-row w-full flex items-center justify-center gap-0.5 sm:gap-1">
                             {rackSlots.slice(22, 44).map((tile, i) => {
                                 const idx = i + 22;
                                 return (
-                                    <div key={idx} data-slot-idx={idx} className={`w-[48px] h-[68px] flex items-center justify-center relative ${draggingIdx !== null ? 'hover:bg-white/5 rounded-lg' : ''}`}>
+                                    <div key={idx} data-slot-idx={idx} className={`w-[32px] sm:w-[48px] h-[48px] sm:h-[68px] flex items-center justify-center relative ${draggingIdx !== null ? 'hover:bg-white/5 rounded-lg' : ''}`}>
                                         {tile && renderGameTile(tile, () => toggleTileSelection(tile.id), idx)}
-                                        {!tile && <div className="absolute inset-1 border border-dashed border-white/5 rounded-lg pointer-events-none"></div>}
+                                        {!tile && <div className="absolute inset-0.5 border border-dashed border-white/5 rounded-lg pointer-events-none"></div>}
                                     </div>
                                 );
                             })}
@@ -1270,20 +1275,20 @@ const GameBoard: React.FC = () => {
                     </div>
 
                     {/* Controls Right */}
-                    <div className="flex flex-col space-y-2 sm:space-y-3 ml-2 sm:ml-4">
+                    <div className="flex flex-col space-y-1.5 sm:space-y-3 ml-1 sm:ml-4">
                         <div className="flex flex-col space-y-1 sm:space-y-1.5">
                             <span className="text-[7px] sm:text-[9px] font-black opacity-40 text-center uppercase tracking-widest leading-none mb-1 hidden sm:block">HAMLE</span>
-                            <div className="flex flex-col gap-1.5 sm:gap-2">
-                                <button onClick={addGroup} className="w-11 h-11 sm:w-14 sm:h-14 btn-premium btn-green border-2 border-green-400/30 flex flex-col items-center justify-center group shadow-xl"><span className="text-xl sm:text-2xl group-hover:scale-110 transition-transform">📦</span><span className="text-[7.5px] sm:text-[9px] font-black uppercase mt-0.5 sm:mt-1">{t('addGroup')}</span></button>
+                            <div className="flex flex-col gap-1 sm:gap-2">
+                                <button onClick={addGroup} className="w-10 h-10 sm:w-14 sm:h-14 btn-premium btn-green border-2 border-green-400/30 flex flex-col items-center justify-center group shadow-xl"><span className="text-lg sm:text-2xl group-hover:scale-110 transition-transform">📦</span><span className="text-[7px] sm:text-[9px] font-black uppercase mt-0 sm:mt-1">{t('addGroup')}</span></button>
                                 <button onClick={async () => { if (pendingSets.length === 0) return alert(t('noSetsToOpen')); await placeSets(pendingSets); }}
-                                    className="w-11 h-11 sm:w-14 sm:h-14 btn-premium btn-amber border-2 border-amber-400/30 flex flex-col items-center justify-center group shadow-xl"><span className="text-xl sm:text-2xl group-hover:scale-110 transition-transform">📤</span><span className="text-[7.5px] sm:text-[9px] font-black uppercase mt-0.5 sm:mt-1">{t('placeOnTable')}</span></button>
+                                    className="w-10 h-10 sm:w-14 sm:h-14 btn-premium btn-amber border-2 border-amber-400/30 flex flex-col items-center justify-center group shadow-xl"><span className="text-lg sm:text-2xl group-hover:scale-110 transition-transform">📤</span><span className="text-[7px] sm:text-[9px] font-black uppercase mt-0 sm:mt-1">{t('placeOnTable')}</span></button>
                             </div>
                         </div>
                         <div className="flex flex-col space-y-1 sm:space-y-1.5">
                             <span className="text-[7px] sm:text-[9px] font-black opacity-40 text-center uppercase tracking-widest leading-none mb-1 hidden sm:block">BİTİR</span>
                             <button id="discard-zone-btn"
                                 onClick={async () => { if (selectedTileIds.size !== 1) return alert(t('selectOneToDiscard')); await discardTile([...selectedTileIds][0]); setSelectedTileIds(new Set()); }}
-                                className="w-11 h-11 sm:w-14 sm:h-14 btn-premium btn-red border-2 border-red-400/30 flex flex-col items-center justify-center group shadow-xl"><span className="text-xl sm:text-2xl group-hover:-translate-y-1 transition-transform">🗑️</span><span className="font-black text-[8px] sm:text-[10px] mt-0.5 sm:mt-1 uppercase">{t('discardAction')}</span></button>
+                                className="w-10 h-10 sm:w-14 sm:h-14 btn-premium btn-red border-2 border-red-400/30 flex flex-col items-center justify-center group shadow-xl"><span className="text-lg sm:text-2xl group-hover:-translate-y-0.5 transition-transform">🗑️</span><span className="font-black text-[7px] sm:text-[10px] mt-0 sm:mt-1 uppercase">{t('discardAction')}</span></button>
                         </div>
                     </div>
                 </div>
