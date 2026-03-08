@@ -337,22 +337,23 @@ const GameBoard: React.FC = () => {
     };
 
     const discardTile = async (tileId: string) => {
-        if (!socketRef.current) return;
+        if (!socketRef.current || !isMyTurn) return;
 
         if (mustOpen) {
-            const confirmed = window.confirm("Yan taş aldığınız için elinizi açmak zorundasınız. Eğer açamıyorsanız, taşı geri verip (101 ceza yiyerek) desteden yeni taş çekmelisiniz. Yandan aldığınız taşı geri vermek istiyor musunuz?");
-            if (confirmed) {
-                undoDrawDiscard();
-            }
-            return;
+            // Cannot discard if must open, unless they undo the draw
+            return alert("Yan taraftan taş aldığınız için bu el mutlaka açmanız gerekiyor. Eğer açamıyorsanız 'GERİ' butonuna basarak taşı iade etmeli ve ceza puanı almalısınız.");
         }
 
         socketRef.current.emit('discardTile', tileId, (err?: string) => {
             if (err) return alert(err);
+            playSound(discardAudio);
             setHand((prev) => prev.filter((t) => t.id !== tileId));
-            setRackSlots(prev => prev.map(s => s?.id === tileId ? null : s));
+            setRackSlots((prev) => prev.map((s) => (s?.id === tileId ? null : s)));
             setHasDrawn(false);
+            setTurnIndex(-1); // wait for server turn update
             setLastDrawnTileId(null);
+            setDrawnFromDiscardTileId(null);
+            setSelectedTileIds(new Set());
         });
     };
 
@@ -1188,43 +1189,40 @@ const GameBoard: React.FC = () => {
                             ) : (
                                 <><span className="text-[10px] sm:text-xs font-black text-amber-500">101?</span><span className={`text-xs sm:text-sm font-black ${(() => {
                                     let total = 0;
-                                    const jokerNumber = okeyTile ? (okeyTile.number % 13) + 1 : -1;
                                     pendingSets.forEach(set => {
-                                        const nonWildcards = set.filter(t => !((t.color === okeyTile?.color && t.number === jokerNumber) || t.isJoker || t.isFakeJoker));
-                                        if (nonWildcards.length > 0) {
-                                            // Simple heuristic for UI: if it's a group, use base * length. 
-                                            // If it's a run, use sum.
-                                            const isGroup = new Set(nonWildcards.map(t => t.color)).size === nonWildcards.length && nonWildcards.every(t => t.number === nonWildcards[0].number);
-                                            if (isGroup) {
-                                                total += nonWildcards[0].number * set.length;
+                                        // Normalize fake jokers for value
+                                        const normalizedNums = set.map(t => t.isFakeJoker ? (okeyTile?.number || 0) : t.number);
+                                        const normalizedColors = set.map(t => t.isFakeJoker ? (okeyTile?.color || '') : t.color);
+
+                                        if (set.length < 3) return; // Invalid structure for series
+
+                                        // Is it a group? (Same numbers, different colors)
+                                        const isGroup = new Set(normalizedColors).size === set.length && normalizedNums.every(n => n === normalizedNums[0]);
+
+                                        if (isGroup) {
+                                            total += normalizedNums[0] * set.length;
+                                        } else {
+                                            // Assume it's a sequence if not group (sum the normalized values)
+                                            // Handle 12-13-1 case (1 counts as 1 but is effectively 14 for sum check)
+                                            const has1 = normalizedNums.includes(1);
+                                            const hasHigh = normalizedNums.includes(12) || normalizedNums.includes(13);
+                                            if (has1 && hasHigh) {
+                                                total += set.reduce((abc, tile) => abc + (tile.isFakeJoker ? (okeyTile?.number || 0) : tile.number), 0);
                                             } else {
-                                                // Seq sum
-                                                set.forEach(t => {
-                                                    if (t.isFakeJoker) total += okeyTile?.number || 0;
-                                                    else if (t.isJoker || (t.color === okeyTile?.color && t.number === jokerNumber)) {
-                                                        // Estimate joker value in seq... complicated for UI. Just sum the numbers for now but better than before.
-                                                        total += t.number;
-                                                    } else total += t.number;
-                                                });
+                                                total += normalizedNums.reduce((abc, n) => abc + n, 0);
                                             }
-                                        } else if (set.length > 0) {
-                                            // All jokers? (edge case)
-                                            total += (okeyTile?.number || 0) * set.length;
                                         }
                                     });
                                     return total;
                                 })() >= 101 ? 'text-green-400' : 'text-white'}`}>{(() => {
                                     let total = 0;
-                                    const jokerNumber = okeyTile ? (okeyTile.number % 13) + 1 : -1;
                                     pendingSets.forEach(set => {
-                                        const nonWildcards = set.filter(t => !((t.color === okeyTile?.color && t.number === jokerNumber) || t.isJoker || t.isFakeJoker));
-                                        if (nonWildcards.length > 0) {
-                                            const isGroup = new Set(nonWildcards.map(t => t.color)).size === nonWildcards.length && nonWildcards.every(t => t.number === nonWildcards[0].number);
-                                            if (isGroup) total += nonWildcards[0].number * set.length;
-                                            else total += set.reduce((abc, tile) => abc + (tile.isFakeJoker ? (okeyTile?.number || 0) : tile.number), 0);
-                                        } else if (set.length > 0) {
-                                            total += (okeyTile?.number || 0) * set.length;
-                                        }
+                                        if (set.length < 3) return;
+                                        const normalizedNums = set.map(t => t.isFakeJoker ? (okeyTile?.number || 0) : t.number);
+                                        const normalizedColors = set.map(t => t.isFakeJoker ? (okeyTile?.color || '') : t.color);
+                                        const isGroup = new Set(normalizedColors).size === set.length && normalizedNums.every(n => n === normalizedNums[0]);
+                                        if (isGroup) total += normalizedNums[0] * set.length;
+                                        else total += normalizedNums.reduce((abc, n) => abc + n, 0);
                                     });
                                     return total;
                                 })()}</span></>

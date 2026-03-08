@@ -45,36 +45,35 @@ export function distributeTiles(pool: Tile[], memberCount: number): { hands: Til
     return { hands, remainingPool: currentPool };
 }
 export function calculateSetScore(tiles: Tile[], okeyTile: Tile): { isValid: boolean, score: number, reason?: string } {
-    if (tiles.length < 3) return { isValid: false, score: 0 };
+    if (tiles.length < 3) return { isValid: false, score: 0, reason: 'SET_TOO_SHORT' };
 
-    // Mark wildcards and normalize values
-    const tilesWithMeta = tiles.map(t => {
-        const isActuallyJoker = (t.color === okeyTile.color && t.number === okeyTile.number);
-        const isWildcard = t.isJoker || isActuallyJoker;
+    // Normalize: Identify wildcards (Okeys) and normalize fake jokers
+    const normalizedTiles = tiles.map(t => {
+        // IMPORTANT: Fake Joker is NOT a wildcard. It's a tile that acts as the original tile displaced by the Okey.
+        const isWildcard = t.isJoker || (!t.isFakeJoker && t.color === okeyTile.color && t.number === okeyTile.number);
 
-        // If it's a Fake Joker, it MUST take the identity of the physical tile that became Joker
-        let effectiveNumber = t.number;
-        let effectiveColor = t.color;
+        let nColor = t.color;
+        let nNumber = t.number;
+
         if (t.isFakeJoker) {
-            effectiveNumber = okeyTile.number;
-            effectiveColor = okeyTile.color;
+            nColor = okeyTile.color;
+            nNumber = okeyTile.number;
         }
 
-        return { ...t, number: effectiveNumber, color: effectiveColor, isWildcard };
+        return { ...t, nColor, nNumber, isWildcard };
     });
 
-    const groupRes = isValidGroup(tilesWithMeta);
+    // Try Group
+    const groupRes = isValidGroup(normalizedTiles);
     if (groupRes.isValid) {
-        const nonWildcards = tilesWithMeta.filter(t => !t.isWildcard);
-        const baseNum = nonWildcards.length > 0 ? nonWildcards[0].number : okeyTile.number;
+        const nonWildcards = normalizedTiles.filter(t => !t.isWildcard);
+        const baseNum = nonWildcards.length > 0 ? nonWildcards[0].nNumber : okeyTile.number;
         return { isValid: true, score: baseNum * tiles.length };
     }
 
-    // Check if it's a valid sequence (consecutive numbers, same color)
-    const seqResult = getSequenceScore(tilesWithMeta);
-    if (seqResult.isValid) {
-        return seqResult;
-    }
+    // Try Sequence
+    const seqRes = getSequenceScore(normalizedTiles, okeyTile);
+    if (seqRes.isValid) return seqRes;
 
     return { isValid: false, score: 0, reason: groupRes.reason || 'INVALID_STRUCTURE' };
 }
@@ -86,117 +85,103 @@ function isValidGroup(tiles: any[]): { isValid: boolean, reason?: string } {
     const nonWildcards = tiles.filter(t => !t.isWildcard);
     if (nonWildcards.length === 0) return { isValid: true };
 
-    const baseNum = nonWildcards[0].number;
+    const baseNum = nonWildcards[0].nNumber;
     const colors = new Set();
     for (const t of nonWildcards) {
-        if (t.number !== baseNum) return { isValid: false, reason: 'GROUP_DIFFERENT_NUMBERS' };
-        if (colors.has(t.color)) return { isValid: false, reason: 'GROUP_DUPLICATE_COLORS' };
-        colors.add(t.color);
+        if (t.nNumber !== baseNum) return { isValid: false, reason: 'GROUP_DIFFERENT_NUMBERS' };
+        if (colors.has(t.nColor)) return { isValid: false, reason: 'GROUP_DUPLICATE_COLORS' };
+        colors.add(t.nColor);
     }
     return { isValid: true };
 }
 
-function getSequenceScore(tiles: any[]): { isValid: boolean, score: number } {
+function getSequenceScore(tiles: any[], okeyTile: Tile): { isValid: boolean, score: number } {
     if (tiles.length < 3) return { isValid: false, score: 0 };
     const nonWildcards = tiles.filter(t => !t.isWildcard);
-    if (nonWildcards.length === 0) return { isValid: true, score: 0 };
-
-    const color = nonWildcards[0].color;
-    if (!nonWildcards.every(t => t.color === color)) return { isValid: false, score: 0 };
-
-    // Standard sort
-    const sorted = [...nonWildcards].sort((a, b) => a.number - b.number);
-
-    // Check for duplicates
-    for (let i = 0; i < sorted.length - 1; i++) {
-        if (sorted[i].number === sorted[i + 1].number) return { isValid: false, score: 0 };
+    if (nonWildcards.length === 0) {
+        let score = 0;
+        for (let i = 0; i < tiles.length; i++) score += (okeyTile.number + i);
+        return { isValid: true, score };
     }
 
-    const wildcardCount = tiles.length - nonWildcards.length;
+    const color = nonWildcards[0].nColor;
+    if (!nonWildcards.every(t => t.nColor === color)) return { isValid: false, score: 0 };
 
-    // Try normal (no wrap)
-    const validateNoWrap = () => {
+    const sortedNum = [...nonWildcards].sort((a, b) => a.nNumber - b.nNumber);
+    for (let i = 0; i < sortedNum.length - 1; i++) {
+        if (sortedNum[i].nNumber === sortedNum[i + 1].nNumber) return { isValid: false, score: 0 };
+    }
+
+    const wildcards = tiles.length - nonWildcards.length;
+
+    const tryNormal = () => {
         let gaps = 0;
-        for (let i = 0; i < sorted.length - 1; i++) {
-            gaps += (sorted[i + 1].number - sorted[i].number - 1);
+        for (let i = 0; i < sortedNum.length - 1; i++) {
+            gaps += (sortedNum[i + 1].nNumber - sortedNum[i].nNumber - 1);
         }
-        if (wildcardCount < gaps) return { isValid: false, score: 0 };
+        if (wildcards < gaps) return { isValid: false, score: 0 };
 
-        let extra = wildcardCount - gaps;
-        let low = sorted[0].number;
-        let high = sorted[sorted.length - 1].number;
-        let score = 0;
-        for (let i = low; i <= high; i++) score += i;
+        let extra = wildcards - gaps;
+        let low = sortedNum[0].nNumber;
+        let high = sortedNum[sortedNum.length - 1].nNumber;
+        let runningScore = 0;
+        for (let i = low; i <= high; i++) runningScore += i;
 
         while (extra > 0) {
-            if (high < 13) { high++; score += high; }
-            else if (low > 1) { low--; score += low; }
+            if (high < 13) { high++; runningScore += high; }
+            else if (low > 1) { low--; runningScore += low; }
             else return { isValid: false, score: 0 };
             extra--;
         }
-        return { isValid: true, score };
+        return { isValid: true, score: runningScore };
     };
 
-    // Try wrap-around (Dönüşlü: 12-13-1)
-    const validateWrap = () => {
-        const hasOne = sorted.some(t => t.number === 1);
-        const hasHigh = sorted.some(t => t.number === 12 || t.number === 13);
-        if (!hasOne || !hasHigh) return { isValid: false, score: 0 };
+    const tryWrap = () => {
+        const has1 = sortedNum.some(t => t.nNumber === 1);
+        const hasHigh = sortedNum.some(t => t.nNumber === 12 || t.nNumber === 13);
+        if (!has1 || !hasHigh) return { isValid: false, score: 0 };
 
-        // In 101 Okey, "1" in a wrap sequence always counts as the tile AFTER 13.
-        // So for calculation, treat it as 14.
-        const wrapSorted = sorted.map(t => t.number === 1 ? { ...t, number: 14 } : t).sort((a, b) => a.number - b.number);
-
+        const wrapped = sortedNum.map(t => t.nNumber === 1 ? { ...t, val: 14 } : { ...t, val: t.nNumber }).sort((a, b) => a.val - b.val);
         let gaps = 0;
-        for (let i = 0; i < wrapSorted.length - 1; i++) {
-            gaps += (wrapSorted[i + 1].number - wrapSorted[i].number - 1);
+        for (let i = 0; i < wrapped.length - 1; i++) {
+            gaps += (wrapped[i + 1].val - wrapped[i].val - 1);
         }
-        if (wildcardCount < gaps) return { isValid: false, score: 0 };
+        if (wildcards < gaps) return { isValid: false, score: 0 };
 
-        let extra = wildcardCount - gaps;
-        let low = wrapSorted[0].number;
-        let high = wrapSorted[wrapSorted.length - 1].number;
-
-        // Wrap sequence can't start below 1 (effectively 1 after 13)
-        // Wait, 11-12-13-1 is valid. 12-13-1 is valid.
-        // 13-1-2 is usually NOT valid.
-        // So low must be at least 1 (if 1 is start) or something leading to 13.
-        // In our wrapSorted, 1 is 14. So a sequence like 12, 13, 14 is fine.
-        // But 14, 15... doesn't exist.
-
-        let score = 0;
-        // Treat 14 as 1 for score? Standard 101 rules: 1 after 13 counts as 1.
-        for (let i = low; i <= high; i++) score += (i === 14 ? 1 : i);
+        let extra = wildcards - gaps;
+        let low = wrapped[0].val;
+        let high = wrapped[wrapped.length - 1].val;
+        let runningScore = 0;
+        for (let i = low; i <= high; i++) runningScore += (i === 14 ? 1 : i);
 
         while (extra > 0) {
-            // In wrap, we can only extend downwards (e.g. 11, 12, 13, 1)
-            // Extending upwards from 1 (14) is illegal.
-            if (low > 1) { low--; score += low; }
+            if (low > 1) { low--; runningScore += low; }
             else return { isValid: false, score: 0 };
             extra--;
         }
-        return { isValid: true, score };
+        return { isValid: true, score: runningScore };
     };
 
-    const resNormal = validateNoWrap();
-    if (resNormal.isValid) return resNormal;
-
-    return validateWrap();
+    const res = tryNormal();
+    if (res.isValid) return res;
+    return tryWrap();
 }
 function isActuallyOkey(t: Tile, okey: Tile): boolean {
     if (t.isJoker) return true;
-    if (t.isFakeJoker) return true; // In our system, Fake Joker always plays as the Okey identity
+    if (t.isFakeJoker) return false; // Fake Jokers are NOT Okeys (wildcards)
     return t.color === okey.color && t.number === okey.number;
 }
 
 function isPair(t1: Tile, t2: Tile, okeyTile: Tile): boolean {
     if (isActuallyOkey(t1, okeyTile) || isActuallyOkey(t2, okeyTile)) return true;
 
-    // Normalize fake jokers (redundant but safe)
-    const n1 = t1.isFakeJoker ? { color: okeyTile.color, number: okeyTile.number } : t1;
-    const n2 = t2.isFakeJoker ? { color: okeyTile.color, number: okeyTile.number } : t2;
+    // Normalize fake jokers
+    const c1 = t1.isFakeJoker ? okeyTile.color : t1.color;
+    const n1 = t1.isFakeJoker ? okeyTile.number : t1.number;
+    const c2 = t2.isFakeJoker ? okeyTile.color : t2.color;
+    const n2 = t2.isFakeJoker ? okeyTile.number : t2.number;
 
-    return n1.color === n2.color && n1.number === n2.number;
+    return c1 === c2 && n1 === n2;
 }
 
 export function calculateMultipleSetsScore(sets: Tile[][], okeyTile: Tile): { isValid: boolean, totalScore: number, reason?: string, isPairHand?: boolean } {
@@ -231,12 +216,9 @@ export function calculateMultipleSetsScore(sets: Tile[][], okeyTile: Tile): { is
  */
 export function calculateHandPenalty(hand: Tile[], okeyTile: Tile, hasOpened: boolean): number {
     if (!hasOpened) return 202;
-
     let total = 0;
-
     hand.forEach(t => {
-        const isActuallyOkey = (t.color === okeyTile.color && t.number === okeyTile.number) || t.isJoker;
-        if (isActuallyOkey) {
+        if (isActuallyOkey(t, okeyTile)) {
             total += 101;
         } else if (t.isFakeJoker) {
             total += okeyTile.number;
@@ -244,8 +226,7 @@ export function calculateHandPenalty(hand: Tile[], okeyTile: Tile, hasOpened: bo
             total += t.number;
         }
     });
-
-    return total === 0 ? 0 : total; // Should not be 0 unless they just finished
+    return total === 0 ? 0 : total;
 }
 export function canAddTileToSet(existingSet: Tile[], newTile: Tile, okeyTile: Tile): { isValid: boolean, newSet: Tile[] } {
     // Try to create a valid set with the new tile
