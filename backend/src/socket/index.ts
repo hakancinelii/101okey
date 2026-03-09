@@ -433,11 +433,14 @@ export const initSocket = (httpServer: HttpServer) => {
                             } as any
                         });
 
-                        io.to(gameId).emit('setPlaced', {
-                            userId: currentMember.userId,
-                            tiles: validSetsToPlace.flat(),
-                            score: totalPlacingScore
-                        });
+                        for (const s of validSetsToPlace) {
+                            const setRes = calculateSetScore(s, okeyTile);
+                            io.to(gameId).emit('setPlaced', {
+                                userId: currentMember.userId,
+                                tiles: s,
+                                score: setRes.score
+                            });
+                        }
 
                         currentHand.length = 0;
                         currentHand.push(...remainingHand);
@@ -1498,11 +1501,21 @@ export const initSocket = (httpServer: HttpServer) => {
                             const index = result.reason.split('_').pop();
                             errorMsg = `Hata: ${index}. periniz (çift) geçersiz. Aynı renk ve sayı olmalıdır.`;
                         } else if (result.reason === 'GROUP_DUPLICATE_COLORS') {
-                            errorMsg = 'Hata: Bir grupta aynı renkten iki taş bulunamaz (Örn: İki tane Siyah 3 olamaz).';
+                            errorMsg = 'Hata: Bir gruptaki tüm taşların renkleri farklı olmalıdır.';
                         } else if (result.reason === 'GROUP_DIFFERENT_NUMBERS') {
                             errorMsg = 'Hata: Gruplar aynı sayılardan oluşmalıdır.';
                         } else if (result.reason === 'SET_TOO_SHORT') {
                             errorMsg = 'Hata: Perler en az 3 taştan oluşmalıdır (Çift açmıyorsanız).';
+                        } else if (result.reason === 'SEQUENCE_DIFFERENT_COLORS') {
+                            errorMsg = 'Hata: Bir serideki (perdeki) tüm taşlar aynı renk olmalıdır.';
+                        } else if (result.reason === 'SEQUENCE_TOO_MANY_GAPS') {
+                            errorMsg = 'Hata: Serideki taşlar arasındaki fark 1\'den fazla olamaz (Örn: 5-7 yan yana gelemez, 5-okey-7 olmalı).';
+                        } else if (result.reason === 'SEQUENCE_DUPLICATE_NUMBERS') {
+                            errorMsg = 'Hata: Bir seride aynı sayıdan iki tane olamaz.';
+                        } else if (result.reason === 'SEQUENCE_OUT_OF_BOUNDS') {
+                            errorMsg = 'Hata: Seri sınırları dışında (13\'ten büyük veya 1\'den küçük numara yapılamaz).';
+                        } else if (result.reason === 'GROUP_TOO_LONG') {
+                            errorMsg = 'Hata: Bir grupta en fazla 4 taş olabilir (Her renkten bir tane).';
                         }
                         console.log(`[ValidationFail] User ${userId} Game ${activeGameId} Reason: ${result.reason}`);
                         return callback(errorMsg);

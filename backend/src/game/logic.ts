@@ -72,7 +72,7 @@ export function calculateSetScore(tiles: Tile[], okeyTile: Tile): { isValid: boo
     const groupRes = isValidGroup(normalizedTiles);
     if (groupRes.isValid) {
         const nonWildcards = normalizedTiles.filter(t => !t.isWildcard);
-        const baseNum = nonWildcards.length > 0 ? nonWildcards[0].nNumber : okeyTile.number;
+        const baseNum = nonWildcards.length > 0 ? nonWildcards[0].nNumber : jokerNumber;
         return { isValid: true, score: baseNum * tiles.length };
     }
 
@@ -80,7 +80,11 @@ export function calculateSetScore(tiles: Tile[], okeyTile: Tile): { isValid: boo
     const seqRes = getSequenceScore(normalizedTiles, okeyTile);
     if (seqRes.isValid) return seqRes;
 
-    return { isValid: false, score: 0, reason: groupRes.reason || 'INVALID_STRUCTURE' };
+    const reason = (groupRes.reason !== 'SET_TOO_SHORT' && groupRes.reason !== 'INVALID_STRUCTURE')
+        ? groupRes.reason
+        : (seqRes.reason || groupRes.reason || 'INVALID_STRUCTURE');
+
+    return { isValid: false, score: 0, reason };
 }
 
 function isValidGroup(tiles: any[]): { isValid: boolean, reason?: string } {
@@ -100,31 +104,32 @@ function isValidGroup(tiles: any[]): { isValid: boolean, reason?: string } {
     return { isValid: true };
 }
 
-function getSequenceScore(tiles: any[], okeyTile: Tile): { isValid: boolean, score: number } {
-    if (tiles.length < 3) return { isValid: false, score: 0 };
+function getSequenceScore(tiles: any[], okeyTile: Tile): { isValid: boolean, score: number, reason?: string } {
+    if (tiles.length < 3) return { isValid: false, score: 0, reason: 'SET_TOO_SHORT' };
     const nonWildcards = tiles.filter(t => !t.isWildcard);
     if (nonWildcards.length === 0) {
+        const jokerNumber = (okeyTile.number % 13) + 1;
         let score = 0;
-        for (let i = 0; i < tiles.length; i++) score += (okeyTile.number + i);
+        for (let i = 0; i < tiles.length; i++) score += (jokerNumber + i);
         return { isValid: true, score };
     }
 
     const color = nonWildcards[0].nColor;
-    if (!nonWildcards.every(t => t.nColor === color)) return { isValid: false, score: 0 };
+    if (!nonWildcards.every(t => t.nColor === color)) return { isValid: false, score: 0, reason: 'SEQUENCE_DIFFERENT_COLORS' };
 
     const sortedNum = [...nonWildcards].sort((a, b) => a.nNumber - b.nNumber);
     for (let i = 0; i < sortedNum.length - 1; i++) {
-        if (sortedNum[i].nNumber === sortedNum[i + 1].nNumber) return { isValid: false, score: 0 };
+        if (sortedNum[i].nNumber === sortedNum[i + 1].nNumber) return { isValid: false, score: 0, reason: 'SEQUENCE_DUPLICATE_NUMBERS' };
     }
 
     const wildcards = tiles.length - nonWildcards.length;
 
-    const tryNormal = () => {
+    const tryNormal = (): { isValid: boolean, score: number, reason?: string } => {
         let gaps = 0;
         for (let i = 0; i < sortedNum.length - 1; i++) {
             gaps += (sortedNum[i + 1].nNumber - sortedNum[i].nNumber - 1);
         }
-        if (wildcards < gaps) return { isValid: false, score: 0 };
+        if (wildcards < gaps) return { isValid: false, score: 0, reason: 'SEQUENCE_TOO_MANY_GAPS' };
 
         let extra = wildcards - gaps;
         let low = sortedNum[0].nNumber;
@@ -135,23 +140,23 @@ function getSequenceScore(tiles: any[], okeyTile: Tile): { isValid: boolean, sco
         while (extra > 0) {
             if (high < 13) { high++; runningScore += high; }
             else if (low > 1) { low--; runningScore += low; }
-            else return { isValid: false, score: 0 };
+            else return { isValid: false, score: 0, reason: 'SEQUENCE_OUT_OF_BOUNDS' };
             extra--;
         }
         return { isValid: true, score: runningScore };
     };
 
-    const tryWrap = () => {
+    const tryWrap = (): { isValid: boolean, score: number, reason?: string } => {
         const has1 = sortedNum.some(t => t.nNumber === 1);
         const hasHigh = sortedNum.some(t => t.nNumber === 12 || t.nNumber === 13);
-        if (!has1 || !hasHigh) return { isValid: false, score: 0 };
+        if (!has1 || !hasHigh) return { isValid: false, score: 0, reason: 'INVALID_SEQUENCE_WRAP' };
 
         const wrapped = sortedNum.map(t => t.nNumber === 1 ? { ...t, val: 14 } : { ...t, val: t.nNumber }).sort((a, b) => a.val - b.val);
         let gaps = 0;
         for (let i = 0; i < wrapped.length - 1; i++) {
             gaps += (wrapped[i + 1].val - wrapped[i].val - 1);
         }
-        if (wildcards < gaps) return { isValid: false, score: 0 };
+        if (wildcards < gaps) return { isValid: false, score: 0, reason: 'SEQUENCE_TOO_MANY_GAPS' };
 
         let extra = wildcards - gaps;
         let low = wrapped[0].val;
@@ -161,15 +166,18 @@ function getSequenceScore(tiles: any[], okeyTile: Tile): { isValid: boolean, sco
 
         while (extra > 0) {
             if (low > 1) { low--; runningScore += low; }
-            else return { isValid: false, score: 0 };
+            else return { isValid: false, score: 0, reason: 'SEQUENCE_OUT_OF_BOUNDS' };
             extra--;
         }
         return { isValid: true, score: runningScore };
     };
 
-    const res = tryNormal();
-    if (res.isValid) return res;
-    return tryWrap();
+    const normalRes = tryNormal();
+    if (normalRes.isValid) return normalRes;
+    const wrapRes = tryWrap();
+    if (wrapRes.isValid) return wrapRes;
+
+    return { isValid: false, score: 0, reason: normalRes.reason || wrapRes.reason || 'INVALID_SEQUENCE' };
 }
 function isActuallyOkey(t: Tile, okey: Tile): boolean {
     if (t.isJoker) return true;
