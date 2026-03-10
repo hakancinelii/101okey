@@ -25,7 +25,7 @@ const Dashboard: React.FC = () => {
     }
 
     return (
-        <div className="min-h-screen bg-okey-table flex flex-col items-center justify-center p-6 text-white font-sans overflow-hidden">
+        <div className="min-h-screen bg-okey-table flex flex-col items-center justify-start pt-12 p-6 text-white font-sans overflow-y-auto no-scrollbar relative">
             {/* Ambient Background Elements */}
             <div className="absolute top-20 left-20 w-96 h-96 bg-green-500/10 rounded-full blur-[100px] animate-pulse"></div>
             <div className="absolute bottom-20 right-20 w-96 h-96 bg-blue-500/10 rounded-full blur-[100px] animate-pulse delay-700"></div>

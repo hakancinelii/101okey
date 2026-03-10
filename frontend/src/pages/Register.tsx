@@ -38,7 +38,7 @@ const Register: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-okey-table flex flex-col items-center justify-center p-6 text-white font-sans overflow-hidden">
+        <div className="min-h-screen bg-okey-table flex flex-col items-center justify-start pt-12 p-6 text-white font-sans overflow-y-auto no-scrollbar relative">
             <div className="absolute top-0 inset-x-0 h-64 bg-gradient-to-b from-black/40 to-transparent"></div>
 
             <div className="w-full max-w-md z-10 animate-in fade-in slide-in-from-bottom-12 duration-700">

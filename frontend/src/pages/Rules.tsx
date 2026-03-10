@@ -8,7 +8,7 @@ const Rules: React.FC = () => {
     const navigate = useNavigate();
 
     return (
-        <div className="min-h-screen bg-okey-table flex flex-col items-center justify-center p-6 text-white font-sans">
+        <div className="min-h-screen bg-okey-table flex flex-col items-center justify-start pt-12 p-6 text-white font-sans overflow-y-auto no-scrollbar relative">
             {/* Ambient Background Elements */}
             <div className="absolute top-20 left-20 w-96 h-96 bg-amber-500/10 rounded-full blur-[100px] animate-pulse"></div>
             <div className="absolute bottom-20 right-20 w-96 h-96 bg-blue-500/10 rounded-full blur-[100px] animate-pulse delay-700"></div>
@@ -24,7 +24,7 @@ const Rules: React.FC = () => {
                 </div>
 
                 {/* Content Sections */}
-                <div className="w-full space-y-8 overflow-y-auto max-h-[60vh] pr-4 custom-scrollbar">
+                <div className="w-full space-y-8 overflow-y-auto max-h-[80vh] pr-4 custom-scrollbar">
 
                     {/* Basic Rules */}
                     <section className="bg-white/5 p-6 rounded-3xl border border-white/5 space-y-4">

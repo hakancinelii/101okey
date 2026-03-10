@@ -201,7 +201,7 @@
 
   /* Better Touch Interactions */
   .pointer-events-auto {
-    touch-action: none;
+    /* removed touch-action: none to restore browser scroll */
   }
 
   /* Mobile Responsive & Landscape Enforcement */

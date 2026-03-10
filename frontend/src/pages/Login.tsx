@@ -37,7 +37,7 @@ const Login: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-okey-table flex flex-col items-center justify-center p-6 text-white font-sans overflow-hidden">
+        <div className="min-h-screen bg-okey-table flex flex-col items-center justify-start pt-12 p-6 text-white font-sans overflow-y-auto no-scrollbar relative">
             {/* Ambient Background Elements */}
             <div className="absolute top-0 inset-x-0 h-64 bg-gradient-to-b from-black/40 to-transparent"></div>
             <div className="absolute -top-24 -left-24 w-96 h-96 bg-amber-500/10 rounded-full blur-[120px] animate-pulse"></div>
