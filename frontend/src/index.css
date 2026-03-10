@@ -12,10 +12,16 @@
 
   html,
   body {
-    height: 100vh;
+    min-height: 100%;
     margin: 0;
-    overflow: hidden;
     font-family: 'Inter', system-ui, sans-serif;
+    background-color: #032116;
+  }
+
+  #root {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
   }
 }
 
@@ -231,7 +237,7 @@
     }
 
     #root {
-      display: none;
+      display: none !important;
     }
   }
 

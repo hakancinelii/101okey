@@ -271,6 +271,14 @@ const GameBoard: React.FC = () => {
 
                     if (bundleAlreadyExists) return m;
 
+                    // Remove placed tiles from local hand and rack if it's us
+                    const myInfo = getUserInfo();
+                    if (data.userId === myInfo.userId) {
+                        const placedIds = new Set(data.tiles.map(t => t.id));
+                        setHand(h => h.filter(tile => !placedIds.has(tile.id)));
+                        setRackSlots(rs => rs.map(s => (s && placedIds.has(s.id)) ? null : s));
+                    }
+
                     return {
                         ...m,
                         openScore: (m.openScore || 0) + data.score,
@@ -1217,27 +1225,46 @@ const GameBoard: React.FC = () => {
                                 <><span className="text-[10px] sm:text-xs font-black text-amber-500">101?</span><span className={`text-xs sm:text-sm font-black ${(() => {
                                     let total = 0;
                                     pendingSets.forEach(set => {
+                                        // Normalize okey for value
                                         const jokerNumber = okeyTile ? (okeyTile.number % 13) + 1 : 0;
-                                        // Normalize fake jokers for value
-                                        const normalizedNums = set.map(t => t.isFakeJoker ? jokerNumber : t.number);
-                                        const normalizedColors = set.map(t => t.isFakeJoker ? (okeyTile?.color || '') : t.color);
+                                        const isOkey = (t: Tile) => t.isJoker || (!t.isFakeJoker && okeyTile && t.color === okeyTile.color && t.number === jokerNumber);
 
-                                        if (set.length < 3) return; // Invalid structure for series
+                                        // Identify non-wildcards to find group base number or sequence color
+                                        const nonWildcards = set.filter(t => !isOkey(t));
+
+                                        if (set.length < 3) return;
 
                                         // Is it a group? (Same numbers, different colors)
-                                        const isGroup = new Set(normalizedColors).size === set.length && normalizedNums.every(n => n === normalizedNums[0]);
+                                        const baseNum = nonWildcards.length > 0 ? (nonWildcards[0].isFakeJoker ? jokerNumber : nonWildcards[0].number) : jokerNumber;
+
+                                        const isGroup = nonWildcards.every(t => (t.isFakeJoker ? jokerNumber : t.number) === baseNum);
 
                                         if (isGroup) {
-                                            total += normalizedNums[0] * set.length;
+                                            total += baseNum * set.length;
                                         } else {
-                                            // Assume it's a sequence if not group (sum the normalized values)
-                                            // Handle 12-13-1 case (1 counts as 1 but is effectively 14 for sum check)
-                                            const has1 = normalizedNums.includes(1);
-                                            const hasHigh = normalizedNums.includes(12) || normalizedNums.includes(13);
+                                            // Assume it's a sequence
+                                            // For sequences, Okeys take the value of the hole they fill.
+                                            // Simplified frontend calculation: just sum the normalized numbers
+                                            const normalizedNums = set.map(t => {
+                                                if (isOkey(t)) return 0; // Placeholder
+                                                if (t.isFakeJoker) return jokerNumber;
+                                                return t.number;
+                                            });
+
+                                            // Fill zeros logic (simple)
+                                            const sortedNonWild = [...normalizedNums].filter(n => n > 0).sort((a, b) => a - b);
+                                            // If it's a 12-13-1 wrap
+                                            const has1 = sortedNonWild.includes(1);
+                                            const hasHigh = sortedNonWild.includes(12) || sortedNonWild.includes(13);
+
                                             if (has1 && hasHigh) {
-                                                total += set.reduce((abc, tile) => abc + (tile.isFakeJoker ? jokerNumber : tile.number), 0);
+                                                total += set.reduce((abc, t) => abc + (isOkey(t) ? 0 : (t.isFakeJoker ? jokerNumber : t.number)), 0);
+                                                // Add okey values for wrap (usually 13 or 14/1)
+                                                const wildCount = set.length - nonWildcards.length;
+                                                total += (wildCount * 13); // rough estimate for 101 display
                                             } else {
-                                                total += normalizedNums.reduce((abc, n) => abc + n, 0);
+                                                const min = sortedNonWild[0];
+                                                for (let i = 0; i < set.length; i++) total += (min + i);
                                             }
                                         }
                                     });
@@ -1247,11 +1274,19 @@ const GameBoard: React.FC = () => {
                                     pendingSets.forEach(set => {
                                         if (set.length < 3) return;
                                         const jokerNumber = okeyTile ? (okeyTile.number % 13) + 1 : 0;
-                                        const normalizedNums = set.map(t => t.isFakeJoker ? jokerNumber : t.number);
-                                        const normalizedColors = set.map(t => t.isFakeJoker ? (okeyTile?.color || '') : t.color);
-                                        const isGroup = new Set(normalizedColors).size === set.length && normalizedNums.every(n => n === normalizedNums[0]);
-                                        if (isGroup) total += normalizedNums[0] * set.length;
-                                        else total += normalizedNums.reduce((abc, n) => abc + n, 0);
+                                        const isOkey = (t: Tile) => t.isJoker || (!t.isFakeJoker && okeyTile && t.color === okeyTile.color && t.number === jokerNumber);
+                                        const nonWildcards = set.filter(t => !isOkey(t));
+                                        const baseNum = nonWildcards.length > 0 ? (nonWildcards[0].isFakeJoker ? jokerNumber : nonWildcards[0].number) : jokerNumber;
+                                        const isGroup = nonWildcards.every(t => (t.isFakeJoker ? jokerNumber : t.number) === baseNum);
+
+                                        if (isGroup) total += baseNum * set.length;
+                                        else {
+                                            const sortedNonWild = nonWildcards.map(t => (t.isFakeJoker ? jokerNumber : t.number)).sort((a, b) => a - b);
+                                            if (sortedNonWild.length > 0) {
+                                                const min = sortedNonWild[0];
+                                                for (let i = 0; i < set.length; i++) total += (min + i);
+                                            }
+                                        }
                                     });
                                     return total;
                                 })()}</span></>
